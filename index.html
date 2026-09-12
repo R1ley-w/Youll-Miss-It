@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>You'll Miss It!</title>
+    <meta
+      name="description"
+      content="Official site for You'll Miss It! — explore the dungeon to find our merch, music, videos and more."
+    />
+    <meta property="og:title" content="You'll Miss It!" />
+    <meta
+      property="og:description"
+      content="Explore the dungeon to find our merch, music, videos and more."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <!-- Plausible analytics — replace data-domain with the real live domain before launch -->
+    <script defer data-domain="REPLACE_WITH_DOMAIN" src="https://plausible.io/js/script.js"></script>
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <div id="inventory-strip" aria-label="Collected items"></div>
+
+    <!--
+      Single source of truth for every destination link, including the footer bar fallback below.
+      The in-game hotspots read these same hrefs at click-time via data-key, so updating a link
+      here (e.g. "featured" whenever there's a new song/video to push) updates everywhere at once.
+    -->
+    <nav id="footer-links" aria-label="Quick links">
+      <a href="https://example.com/merch" data-key="merch" target="_blank" rel="noopener">Merch</a>
+      <a href="https://example.com/youtube" data-key="youtube" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://example.com/streaming" data-key="streaming" target="_blank" rel="noopener">Listen</a>
+      <a href="https://instagram.com/youllmissitband" data-key="socials" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://example.com/featured" data-key="featured" target="_blank" rel="noopener">Featured</a>
+    </nav>
+
+    <div id="completion-overlay" class="overlay">
+      <div class="overlay-card">
+        <h2>You found everything!</h2>
+        <p>Thanks for exploring the dungeon with us. See you at a show. 🖤</p>
+        <button id="completion-close" type="button">Keep exploring</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

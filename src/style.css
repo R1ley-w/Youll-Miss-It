@@ -1,0 +1,147 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #0d0a08;
+  font-family: 'Courier New', Courier, monospace;
+  color: #f2e9dc;
+}
+
+#game-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#inventory-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: max(10px, env(safe-area-inset-top)) 10px 6px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.item-slot {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  filter: grayscale(1) opacity(0.35);
+  transition: filter 0.3s ease;
+}
+
+.item-slot.collected {
+  filter: none;
+  border-color: #ffd166;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+#footer-links {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10;
+}
+
+#footer-links a {
+  color: #f2e9dc;
+  text-decoration: none;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#footer-links a:hover,
+#footer-links a:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 20;
+}
+
+.overlay.visible {
+  display: flex;
+}
+
+.overlay-card {
+  background: #1a1410;
+  border: 2px solid #ffd166;
+  border-radius: 12px;
+  padding: 28px 24px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.overlay-card h2 {
+  margin: 0 0 8px;
+}
+
+.overlay-card button {
+  margin-top: 16px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #ffd166;
+  color: #1a1410;
+  font-family: inherit;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.confetti-piece {
+  position: fixed;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  opacity: 0.9;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+  pointer-events: none;
+  z-index: 30;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0.3;
+  }
+}
