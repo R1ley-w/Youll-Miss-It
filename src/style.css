@@ -26,6 +26,15 @@ body {
   -webkit-touch-callout: none;
 }
 
+/*
+  Phaser's pixelArt flag only governs how it samples textures into its own canvas; the
+  browser then scales that canvas to the screen and smooths it by default, undoing the
+  crispness. This is what actually keeps the pixel art sharp on a high-DPI phone.
+*/
+#game-container canvas {
+  image-rendering: pixelated;
+}
+
 #inventory-strip {
   position: fixed;
   top: 0;
@@ -48,15 +57,63 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  filter: grayscale(1) opacity(0.35);
-  transition: filter 0.3s ease;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+/*
+  Dim the sprite only, never the slot frame — the prize art is mostly dark, so dimming the
+  whole slot made uncollected ones disappear entirely against the background.
+*/
+.item-slot img {
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+  filter: grayscale(1);
+  opacity: 0.4;
+  transition: filter 0.3s ease, opacity 0.3s ease;
 }
 
 .item-slot.collected {
-  filter: none;
   border-color: #ffd166;
   background: rgba(0, 0, 0, 0.65);
+}
+
+.item-slot.collected img {
+  filter: none;
+  opacity: 1;
+}
+
+#control-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffe66d;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+#control-hint.hidden {
+  opacity: 0;
+}
+
+.desk-only {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .touch-only {
+    display: none;
+  }
+  .desk-only {
+    display: inline;
+  }
 }
 
 #footer-links {
