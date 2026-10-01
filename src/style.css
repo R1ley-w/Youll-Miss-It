@@ -14,6 +14,18 @@ body {
   color: #f2e9dc;
 }
 
+/*
+  Dungeon wall behind the canvas, filling the letterbox on wide screens. Phones never see
+  it — the canvas covers the viewport there. Drawn at 2x so the upscale stays on whole
+  pixels; the tile is already darkened so it sits behind the game rather than competing.
+*/
+body {
+  background-image: url('/assets/wall-tile.png');
+  background-repeat: repeat;
+  background-size: 192px 192px;
+  image-rendering: pixelated;
+}
+
 #game-container {
   position: fixed;
   inset: 0;
@@ -33,6 +45,61 @@ body {
 */
 #game-container canvas {
   image-rendering: pixelated;
+  /* Fades the play area into the surrounding wall instead of ending on a hard rectangle. */
+  box-shadow: 0 0 90px 36px rgba(0, 0, 0, 0.85);
+}
+
+/*
+  Side panels fill the letterbox either side of the canvas. The canvas is 384x640, so
+  whenever height is the limiting dimension its width is 0.6 * viewport height — which
+  makes each margin (100vw - 60vh) / 2. Hidden by default; only shown once that margin
+  is genuinely wide enough to hold text.
+*/
+.side-panel {
+  display: none;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: calc((100vw - 60vh) / 2);
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  box-sizing: border-box;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.side-left {
+  left: 0;
+}
+
+.side-right {
+  right: 0;
+}
+
+.side-title {
+  margin: 0;
+  font-size: clamp(22px, 3.4vw, 54px);
+  font-weight: bold;
+  line-height: 1.15;
+  color: #f2e9dc;
+  text-shadow: 0 2px 0 #000, 0 0 24px rgba(0, 0, 0, 0.9);
+}
+
+.side-note {
+  margin: 0;
+  font-size: clamp(12px, 1.2vw, 18px);
+  line-height: 1.6;
+  color: #ffe66d;
+  opacity: 0.75;
+  text-shadow: 0 2px 0 #000, 0 0 18px rgba(0, 0, 0, 0.9);
+}
+
+@media (min-width: 900px) and (min-aspect-ratio: 1 / 1) {
+  .side-panel {
+    display: flex;
+  }
 }
 
 #inventory-strip {
