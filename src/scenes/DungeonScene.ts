@@ -2,41 +2,14 @@ import Phaser from 'phaser';
 import { Inventory, ItemId, ALL_ITEM_IDS } from '../systems/Inventory';
 import { trackEvent } from '../systems/analytics';
 import { getLinkUrl } from '../systems/links';
-import {
-  WORLD_WIDTH,
-  WORLD_HEIGHT,
-  MOVE_SPEED,
-  JUMP_VELOCITY,
-  PROXIMITY_RADIUS,
-  TILE,
-} from '../constants';
+import { Layout, Ledge } from '../layouts';
+import { PROXIMITY_RADIUS, TILE } from '../constants';
 
 // Survives the tab being evicted while the visitor is off on Spotify/YouTube, so the
 // prize sequence still fires when they come back.
 const PENDING_KEY = 'ymi-pending-v1';
 
-const GROUND_SURFACE_Y = 608;
 const SEQUENCE_MS = 1000;
-
-interface Ledge {
-  key: ItemId;
-  label: string;
-  surfaceY: number;
-  x0: number;
-  x1: number;
-  chestX: number;
-  chestY: number;
-}
-
-// Derived from Background.png's 16px tile grid. surfaceY is the walkable top edge;
-// each chest sits exactly one tile above it.
-const LEDGES: Ledge[] = [
-  { key: 'merch', label: 'Merch', surfaceY: 512, x0: 192, x1: 336, chestX: 304, chestY: 496 },
-  { key: 'youtube', label: 'YouTube', surfaceY: 400, x0: 0, x1: 144, chestX: 16, chestY: 384 },
-  { key: 'featured', label: 'Featured', surfaceY: 304, x0: 176, x1: 272, chestX: 240, chestY: 288 },
-  { key: 'streaming', label: 'Listen', surfaceY: 192, x0: 0, x1: 144, chestX: 16, chestY: 176 },
-  { key: 'socials', label: 'Instagram', surfaceY: 64, x0: 192, x1: 336, chestX: 272, chestY: 48 },
-];
 
 const PRIZE_SRC: Record<ItemId, string> = {
   merch: '/assets/prizes/Shirt.png',
@@ -68,6 +41,7 @@ function takePending(): ItemId | null {
 
 export class DungeonScene extends Phaser.Scene {
   private inventory = new Inventory();
+  private layout: Layout;
 
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerBody!: Phaser.Physics.Arcade.Body;
@@ -91,13 +65,20 @@ export class DungeonScene extends Phaser.Scene {
   private touchStartY = 0;
   private touchStartTime = 0;
   private swipeJumpRequested = false;
+  /*
+    All listeners on DOM outside the canvas are scoped to this. The footer links and
+    document survive a scene teardown, so without it a layout rebuild would stack a
+    second set of handlers and fire every analytics event twice.
+  */
+  private domListeners = new AbortController();
 
-  constructor() {
+  constructor(layout: Layout) {
     super('DungeonScene');
+    this.layout = layout;
   }
 
   preload() {
-    this.load.image('bg', '/assets/Background.png');
+    this.load.image('bg', this.layout.backgroundSrc);
     this.load.image('opened_chest', '/assets/opened_chest.png');
 
     for (const id of ALL_ITEM_IDS) {
@@ -118,7 +99,7 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   create() {
-    this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.physics.world.setBounds(0, 0, this.layout.width, this.layout.height);
     this.add.image(0, 0, 'bg').setOrigin(0, 0).setDepth(-10);
 
     this.buildAnimations();
@@ -129,8 +110,16 @@ export class DungeonScene extends Phaser.Scene {
     this.setupKeyboard();
     this.setupPointer();
     this.setupFooterLinks();
-    this.setupReturnHandler();
     this.setupCompletionOverlay();
+
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.visibilityState === 'visible') this.checkPending();
+      },
+      { signal: this.domListeners.signal }
+    );
+    this.events.once('shutdown', () => this.domListeners.abort());
 
     this.renderInventoryUI();
 
@@ -145,14 +134,15 @@ export class DungeonScene extends Phaser.Scene {
       return;
     }
 
+    const { moveSpeed, jumpVelocity } = this.layout.physics;
     const left = this.cursors.left.isDown || this.keys.A.isDown || this.leftHeld;
     const right = this.cursors.right.isDown || this.keys.D.isDown || this.rightHeld;
 
     if (left && !right) {
-      this.playerBody.setVelocityX(-MOVE_SPEED);
+      this.playerBody.setVelocityX(-moveSpeed);
       this.player.setFlipX(true);
     } else if (right && !left) {
-      this.playerBody.setVelocityX(MOVE_SPEED);
+      this.playerBody.setVelocityX(moveSpeed);
       this.player.setFlipX(false);
     } else {
       this.playerBody.setVelocityX(0);
@@ -167,7 +157,7 @@ export class DungeonScene extends Phaser.Scene {
 
     const onGround = this.playerBody.blocked.down;
     if (jumpPressed && onGround) {
-      this.playerBody.setVelocityY(JUMP_VELOCITY);
+      this.playerBody.setVelocityY(jumpVelocity);
     }
 
     if (left || right || jumpPressed) this.dismissHint();
@@ -196,8 +186,14 @@ export class DungeonScene extends Phaser.Scene {
 
   private buildPlatforms() {
     const surfaces = [
-      { x0: 0, x1: WORLD_WIDTH, y: GROUND_SURFACE_Y, oneWay: false },
-      ...LEDGES.map((l) => ({ x0: l.x0, x1: l.x1, y: l.surfaceY, oneWay: true })),
+      { x0: 0, x1: this.layout.width, y: this.layout.groundSurfaceY, oneWay: false },
+      ...this.layout.ledges.map((l) => ({ x0: l.x0, x1: l.x1, y: l.surfaceY, oneWay: true })),
+      ...this.layout.steppingStones.map((s) => ({
+        x0: s.x0,
+        x1: s.x1,
+        y: s.surfaceY,
+        oneWay: true,
+      })),
     ];
     for (const s of surfaces) {
       const width = s.x1 - s.x0;
@@ -219,7 +215,7 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   private buildChests() {
-    for (const ledge of LEDGES) {
+    for (const ledge of this.layout.ledges) {
       const img = this.add
         .image(ledge.chestX + TILE / 2, ledge.chestY + TILE / 2, 'opened_chest')
         .setDepth(0)
@@ -229,7 +225,9 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   private buildPlayer() {
-    this.player = this.physics.add.sprite(96, GROUND_SURFACE_Y - 16, 'rest_1').setDepth(10);
+    this.player = this.physics.add
+      .sprite(this.layout.spawnX, this.layout.groundSurfaceY - 16, 'rest_1')
+      .setDepth(10);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     this.playerBody.setSize(12, 24);
     this.playerBody.setOffset(10, 8);
@@ -269,7 +267,7 @@ export class DungeonScene extends Phaser.Scene {
 
       this.touchStartY = pointer.y;
       this.touchStartTime = this.time.now;
-      if (pointer.worldX < WORLD_WIDTH / 2) {
+      if (pointer.worldX < this.layout.width / 2) {
         this.leftHeld = true;
       } else {
         this.rightHeld = true;
@@ -300,18 +298,16 @@ export class DungeonScene extends Phaser.Scene {
   private setupFooterLinks() {
     const links = document.querySelectorAll<HTMLAnchorElement>('#footer-links a[data-key]');
     links.forEach((link) => {
-      link.addEventListener('click', () => {
-        const key = link.dataset.key as ItemId;
-        if (!ALL_ITEM_IDS.includes(key)) return;
-        if (!this.inventory.has(key)) setPending(key);
-        trackEvent(`visit_${key}`);
-      });
-    });
-  }
-
-  private setupReturnHandler() {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.checkPending();
+      link.addEventListener(
+        'click',
+        () => {
+          const key = link.dataset.key as ItemId;
+          if (!ALL_ITEM_IDS.includes(key)) return;
+          if (!this.inventory.has(key)) setPending(key);
+          trackEvent(`visit_${key}`);
+        },
+        { signal: this.domListeners.signal }
+      );
     });
   }
 
@@ -319,7 +315,9 @@ export class DungeonScene extends Phaser.Scene {
     const overlay = document.getElementById('completion-overlay');
     document
       .getElementById('completion-close')
-      ?.addEventListener('click', () => overlay?.classList.remove('visible'));
+      ?.addEventListener('click', () => overlay?.classList.remove('visible'), {
+        signal: this.domListeners.signal,
+      });
   }
 
   private updateAnimation(onGround: boolean, moving: boolean) {
@@ -333,7 +331,7 @@ export class DungeonScene extends Phaser.Scene {
     let nearest: Ledge | null = null;
     let nearestDist = Infinity;
 
-    for (const ledge of LEDGES) {
+    for (const ledge of this.layout.ledges) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x,
         this.player.y,
@@ -383,9 +381,7 @@ export class DungeonScene extends Phaser.Scene {
 
     this.player.play('reward', true);
 
-    const prize = this.add
-      .image(this.player.x, this.player.y - 22, prizeTexture(id))
-      .setDepth(20);
+    const prize = this.add.image(this.player.x, this.player.y - 22, prizeTexture(id)).setDepth(20);
     this.tweens.add({
       targets: prize,
       y: prize.y - 18,
@@ -415,7 +411,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!strip) return;
     strip.innerHTML = '';
     for (const id of ALL_ITEM_IDS) {
-      const ledge = LEDGES.find((l) => l.key === id)!;
+      const ledge = this.layout.ledges.find((l) => l.key === id)!;
       const slot = document.createElement('div');
       slot.className = 'item-slot' + (this.inventory.has(id) ? ' collected' : '');
       slot.title = ledge.label;

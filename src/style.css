@@ -52,6 +52,14 @@ body {
   }
 }
 
+/*
+  The landscape map is 16:9, so it leaves no horizontal margin to fill — and the width
+  calc above hardcodes the portrait aspect, so it would be wrong here anyway.
+*/
+body.layout-landscape .bg-extend {
+  display: none;
+}
+
 #game-container {
   position: fixed;
   inset: 0;
