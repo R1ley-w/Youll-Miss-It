@@ -21,13 +21,9 @@
   <body>
     <div id="game-container"></div>
 
-    <!-- Decorative only; shown on wide screens to fill the space either side of the canvas. -->
-    <div class="side-panel side-left" aria-hidden="true">
-      <p class="side-title">You'll<br />Miss It!</p>
-    </div>
-    <div class="side-panel side-right" aria-hidden="true">
-      <p class="side-note">Climb the dungeon.<br />Find all five.</p>
-    </div>
+    <!-- Mirrored continuations of the dungeon, filling the letterbox on wide screens. -->
+    <div class="bg-extend bg-left" aria-hidden="true"></div>
+    <div class="bg-extend bg-right" aria-hidden="true"></div>
 
     <div id="control-hint">
       <span class="touch-only">Hold either side to move &middot; Swipe up to jump</span>
