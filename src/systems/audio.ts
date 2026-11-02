@@ -118,6 +118,8 @@ class AudioEngine {
   private tracks = new Map<SongKey, Track>();
   private fading: SongKey | null = null;
   private fadeTimer: number | null = null;
+  // Songs that were playing when the tab hid, to pick back up mid-song on return.
+  private pausedForHide = new Set<SongKey>();
 
   private manifestLoaded = false;
   private unlocked = false;
@@ -163,14 +165,8 @@ class AudioEngine {
     window.addEventListener('click', gesture);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        this.stopOneShotScheduler();
-        this.ctx?.suspend().catch(() => {});
-      } else {
-        void this.resumeContext().then((running) => {
-          if (running) this.scheduleOneShots();
-        });
-      }
+      if (document.visibilityState === 'hidden') this.onHide();
+      else this.onShow();
     });
   }
 
@@ -384,6 +380,33 @@ class AudioEngine {
     return true;
   }
 
+  /**
+   * Suspending the context silences the graph but not the media elements behind it — their
+   * clocks keep running, so a song would come back further along (and the non-looping
+   * completion track could end unheard). Pause them too.
+   */
+  private onHide() {
+    this.stopOneShotScheduler();
+    for (const [key, track] of this.tracks) {
+      if (track.el.paused) continue;
+      track.el.pause();
+      this.pausedForHide.add(key);
+    }
+    this.ctx?.suspend().catch(() => {});
+  }
+
+  private onShow() {
+    void this.resumeContext().then((running) => {
+      if (!running) return;
+      for (const key of this.pausedForHide) {
+        const track = this.tracks.get(key);
+        if (track) void this.playElement(track.el, key);
+      }
+      this.pausedForHide.clear();
+      if (this.unlocked) this.scheduleOneShots();
+    });
+  }
+
   private async loadBuffers() {
     const primary = pickExt();
     const exts = primary === 'm4a' ? ['m4a', 'webm'] : ['webm', 'm4a'];
@@ -539,6 +562,7 @@ class AudioEngine {
   }
 
   private releaseSong(key: SongKey) {
+    this.pausedForHide.delete(key);
     const track = this.tracks.get(key);
     if (!track) return;
     track.el.pause();

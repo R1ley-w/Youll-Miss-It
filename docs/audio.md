@@ -100,7 +100,8 @@ rather than a freeze — if it feels bad, shorten the swell, not the lock.
 ## Tab visibility
 
 Suspend the context on hide; resume mid-song on return. Nothing ever plays over
-Spotify/YouTube.
+Spotify/YouTube. Suspending the context doesn't stop media elements, so playing songs are
+paused too — otherwise they'd come back further along.
 
 ## Completion
 
