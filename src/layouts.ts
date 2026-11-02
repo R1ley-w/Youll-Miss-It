@@ -57,8 +57,10 @@ export const PORTRAIT: Layout = {
   steppingStones: [],
   // Clears the tallest gap (128px, streaming -> socials) with a 146px rise.
   physics: { moveSpeed: 140, jumpVelocity: -520, gravityY: 900 },
-  // Spawn sits 213px from the nearest chest, just outside this field — land hearing only drips.
-  audioRadius: 210,
+  // The closest chest pair (youtube -> streaming) is only 208px apart on this map, so a
+  // radius near that makes both songs audible at once and they crossfade back and forth as
+  // Greg climbs. Keep it well under half that gap so fields never overlap.
+  audioRadius: 100,
 };
 
 export const LANDSCAPE: Layout = {
@@ -89,8 +91,9 @@ export const LANDSCAPE: Layout = {
   // Tallest gap here is only 96px, so a 128px rise leaves comfortable margin. Faster walk
   // because the world is twice as wide.
   physics: { moveSpeed: 170, jumpVelocity: -480, gravityY: 900 },
-  // Spawn sits 219px from the nearest chest, just outside this field.
-  audioRadius: 210,
+  // Closest chest pair (featured -> merch) is 182px, so keep the field tight enough that two
+  // songs don't both claim the same spot as Greg moves between ledges.
+  audioRadius: 150,
 };
 
 /**
