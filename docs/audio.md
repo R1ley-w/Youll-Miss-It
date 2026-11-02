@@ -73,7 +73,8 @@ landscape closest pair 182px, spawn 219px, and a 437px gap between Featured and 
 
 - **Always on**, ducked by the active song: `bedGain = bedBase × (1 − songGain)`.
 - One seamless 31.75s stereo loop with **no distinct events**, plus the 9 one-shots
-  (6 drips, 2 chain, 1 creak) re-scheduled at randomised **4–12s** intervals.
+  (6 drips, 2 chain, 1 creak) re-scheduled at randomised **4–12s** intervals. One-shots route
+  through the bed's gain, so they duck with it.
 - Read the one-shot list from `manifest.json` rather than hard-coding names — the count is a
   property of the source recordings and will change if they're re-recorded.
 

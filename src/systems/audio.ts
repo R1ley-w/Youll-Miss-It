@@ -22,7 +22,8 @@ const MASTER_UNMUTE_TC = 0.3; // fade back in after an unmute (s)
 const MASTER_MUTE_TC = 0.1; // fade out on mute (s)
 const BED_BASE = 0.4; // ambient bed level when no song is audible (ducked by song)
 const BED_FADE_IN_TC = 0.2; // bed coming up after unlock (s)
-const SFX_GAIN = 0.8; // one-shot level relative to music
+const ONE_SHOT_GAIN = 1; // one-shot level relative to the bed (they duck with it)
+const SFX_GAIN = 0.8; // SFX level relative to music
 
 const PROXIMITY_TC = 0.12; // how fast a song tracks Greg's distance (s)
 const CROSSFADE_TC = 0.8; // how long a track swap crossfades (s)
@@ -481,7 +482,8 @@ class AudioEngine {
   private playRandomOneShot() {
     if (this.oneShotNames.length === 0) return;
     const name = this.oneShotNames[Math.floor(Math.random() * this.oneShotNames.length)];
-    this.playBuffer(name, this.master!, SFX_GAIN);
+    // One-shots are part of the bed, so they go through its gain and duck with it.
+    this.playBuffer(name, this.bedGain!, ONE_SHOT_GAIN);
   }
 
   private playSfx(name: SfxName) {
