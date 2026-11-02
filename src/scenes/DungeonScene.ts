@@ -409,8 +409,8 @@ export class DungeonScene extends Phaser.Scene {
       this.renderInventoryUI();
       this.sequenceRunning = false;
 
-      const collected = ALL_ITEM_IDS.filter((i) => this.inventory.has(i)).length;
-      if (collected === 4) audio.preloadCompletion();
+      // >= rather than ===: the fourth item may have been collected in an earlier visit.
+      if (this.inventory.count() >= 4) audio.preloadCompletion();
       if (this.inventory.isComplete()) this.showCompletion();
     });
   }

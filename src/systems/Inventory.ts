@@ -40,6 +40,10 @@ export class Inventory {
     return true;
   }
 
+  count(): number {
+    return this.collected.size;
+  }
+
   isComplete(): boolean {
     return ALL_ITEM_IDS.every((id) => this.collected.has(id));
   }
