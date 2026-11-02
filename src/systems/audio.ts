@@ -131,7 +131,8 @@ class AudioEngine {
   private masterTarget = 0;
   private masterTimeConstant = MASTER_FADE_TC;
 
-  private radius = 210;
+  // Overwritten by setLayout() before the first update(); the real values live on Layout.
+  private radius = 0;
   private chestCenters = new Map<ItemId, { x: number; y: number }>();
 
   private activeChest: ItemId | null = null;

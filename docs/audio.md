@@ -54,8 +54,11 @@ source start. Re-check before each playback start. Schedule with a small lead,
 
 ## Proximity mechanic
 
-- **R ≈ 210px**, as a field on `Layout` (`audioRadius`) beside `physics` — the two maps are
-  shaped nothing alike.
+- **R** is a field on `Layout` (`audioRadius`) beside `physics` — the two maps are shaped
+  nothing alike. Designed at ≈ 210px; tightened to **100px portrait / 150px landscape**
+  (`752533c`) so neighbouring fields never overlap. Provisional — chosen from geometry, not by
+  ear. With fields this tight, the midpoint crossfade below rarely happens: songs hand over
+  through silence.
 - **Nearest chest wins**, with ~20px hysteresis to stop flapping at the midpoint.
 - Gain curve ≈ `(1 − d/R)^1.5`. Linear sounds abrupt.
 - Proximity tracking time constant ~**0.12s**; track-swap crossfade ~**0.8s** (deliberately
