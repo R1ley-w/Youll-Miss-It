@@ -48,6 +48,20 @@ interface AudioManifest {
 
 const SFX_NAMES = ['chest_open', 'prize_collect', 'landing'] as const;
 
+// Fallback one-shot list if the manifest can't be fetched. The manifest is authoritative
+// (the count is a property of the source recordings), but losing it must not silence the bed.
+const FALLBACK_ONE_SHOTS = [
+  'drip-1',
+  'drip-2',
+  'drip-3',
+  'drip-4',
+  'drip-5',
+  'drip-6',
+  'chain-1',
+  'chain-2',
+  'creak',
+];
+
 function isWebKit(): boolean {
   const ua = navigator.userAgent;
   // Apple's browsers — Safari, iOS, and the in-app browsers built on it (Instagram is the
@@ -84,6 +98,9 @@ class AudioEngine {
   private manifest: AudioManifest | null = null;
   private unlocked = false;
   private muted = false;
+
+  private masterTarget = 0;
+  private masterTc = MASTER_FADE_TC;
 
   private radius = 210;
   private chestCenters = new Map<ItemId, { x: number; y: number }>();
@@ -150,13 +167,18 @@ class AudioEngine {
   }
 
   update(x: number, y: number) {
-    if (!this.ctx || this.ctx.state !== 'running' || !this.manifest) {
+    if (!this.ctx || this.ctx.state !== 'running') {
       this.lastUpdateTime = 0;
       return;
     }
     const now = performance.now();
     const dt = this.lastUpdateTime ? (now - this.lastUpdateTime) / 1000 : 0;
     this.lastUpdateTime = now;
+
+    // The master is synced every frame rather than set once, because the single fade-in in
+    // unlock() can fire while WebKit's clock is still frozen and be silently dropped. This
+    // way the mix comes up the instant the context is genuinely running, no matter how late.
+    this.setGain(this.master!, this.masterTarget, this.masterTc);
 
     if (this.completionActive) return;
 
@@ -200,7 +222,7 @@ class AudioEngine {
         const el = this.songs.get(id);
         if (el) {
           el.currentTime = 0; // the shipped file already begins at the hook
-          el.play().catch(() => {});
+          this.playElement(el, id);
         }
       }
 
@@ -253,7 +275,7 @@ class AudioEngine {
     void this.resumeContext().then((running) => {
       if (!running) return;
       this.setGain(this.bedGain!, 0, PROXIMITY_TC);
-      el.play().catch(() => {});
+      this.playElement(el, COMPLETION);
       this.setGain(this.songGains.get(COMPLETION)!, 1, CROSSFADE_TC);
     });
   }
@@ -267,13 +289,12 @@ class AudioEngine {
     }
     this.updateMuteButton();
 
+    this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
+    this.masterTc = this.muted ? 0.1 : 0.3;
     if (this.muted) {
-      this.setGain(this.master!, 0, 0.1);
       trackEvent('audio_muted');
     } else if (this.ctx) {
-      void this.resumeContext().then((running) => {
-        if (running) this.setGain(this.master!, MASTER_DEFAULT, 0.3);
-      });
+      void this.resumeContext();
     }
     return this.muted;
   }
@@ -303,7 +324,9 @@ class AudioEngine {
     this.setGain(this.bedGain!, BED_BASE, 0.2);
     this.scheduleOneShots();
 
-    if (!this.muted) this.setGain(this.master!, MASTER_DEFAULT, MASTER_FADE_TC);
+    this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
+    this.masterTc = this.muted ? 0.1 : MASTER_FADE_TC;
+    console.info('[audio] unlocked', { state: ctx.state, muted: this.muted, buffers: this.buffers.size });
   }
 
   /**
@@ -321,42 +344,58 @@ class AudioEngine {
         return false;
       }
     }
-    const deadline = performance.now() + 1000;
+    const deadline = performance.now() + 3000;
     while (ctx.state !== 'running') {
-      if (performance.now() > deadline) return false;
+      if (performance.now() > deadline) {
+        console.warn('[audio] context did not reach "running" in time', ctx.state);
+        return false;
+      }
       await sleep(50);
     }
     return true;
   }
 
   private async loadBuffers() {
-    const ext = pickExt();
-    const manifest = (await fetch('/assets/audio/manifest.json').then((r) =>
-      r.json()
-    )) as AudioManifest;
-    this.manifest = manifest;
-    this.oneShotNames = manifest.ambient.oneShots.map((o) => o.name);
+    const primary = pickExt();
+    const exts = primary === 'm4a' ? ['m4a', 'webm'] : ['webm', 'm4a'];
 
-    const paths = new Map<string, string>([['bed', `/assets/audio/ambient/bed.${ext}`]]);
-    for (const name of this.oneShotNames) {
-      paths.set(name, `/assets/audio/ambient/${name}.${ext}`);
-    }
-    for (const name of SFX_NAMES) {
-      paths.set(name, `/assets/audio/sfx/${name}.${ext}`);
+    try {
+      const manifest = (await fetch('/assets/audio/manifest.json').then((r) =>
+        r.json()
+      )) as AudioManifest;
+      this.manifest = manifest;
+      this.oneShotNames = manifest.ambient.oneShots.map((o) => o.name);
+    } catch (err) {
+      console.error('[audio] manifest load failed, using fallback one-shots', err);
+      this.oneShotNames = FALLBACK_ONE_SHOTS;
     }
 
-    await Promise.all(
-      [...paths.entries()].map(async ([name, path]) => {
-        try {
-          const res = await fetch(path);
-          const arrayBuf = await res.arrayBuffer();
-          const buffer = await this.ctx!.decodeAudioData(arrayBuf);
-          this.buffers.set(name, buffer);
-        } catch {
-          // a single bad buffer must not take the whole bed down
-        }
-      })
-    );
+    const targets = [
+      { name: 'bed', dir: 'ambient' },
+      ...this.oneShotNames.map((name) => ({ name, dir: 'ambient' })),
+      ...SFX_NAMES.map((name) => ({ name, dir: 'sfx' })),
+    ];
+    await Promise.all(targets.map(({ name, dir }) => this.loadBuffer(name, dir, exts)));
+  }
+
+  /**
+   * decodeAudioData support for a given container is not guaranteed on WebKit — the Opus bug
+   * is about media elements, but decoding is its own gamble. Try the preferred format, then
+   * fall back to the other, so a codec gap can't take the bed down with it.
+   */
+  private async loadBuffer(name: string, dir: string, exts: string[]): Promise<void> {
+    for (const ext of exts) {
+      try {
+        const res = await fetch(`/assets/audio/${dir}/${name}.${ext}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buffer = await this.ctx!.decodeAudioData(await res.arrayBuffer());
+        this.buffers.set(name, buffer);
+        return;
+      } catch (err) {
+        console.warn(`[audio] failed to load ${dir}/${name}.${ext}`, err);
+      }
+    }
+    console.error(`[audio] could not load ${dir}/${name} in any format`);
   }
 
   private startBed() {
@@ -403,6 +442,12 @@ class AudioEngine {
     src.start();
   }
 
+  private playElement(el: HTMLAudioElement, label: string) {
+    el.play().catch((err) => {
+      console.warn(`[audio] play() rejected for ${label}`, err);
+    });
+  }
+
   private ensureSong(key: SongKey) {
     if (this.songs.has(key) || !this.ctx) return;
     const el = new Audio();
@@ -431,7 +476,7 @@ class AudioEngine {
     this.ensureSong(key);
     const el = this.songs.get(key)!;
     el.currentTime = 0; // re-entering a field restarts the track at its hook, every time
-    el.play().catch(() => {});
+    this.playElement(el, key);
   }
 
   private fadeOut(key: SongKey) {
