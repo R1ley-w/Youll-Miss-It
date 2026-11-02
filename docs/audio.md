@@ -36,7 +36,8 @@ possible one: the song plays at full volume, completely ignoring proximity.
 Safari answers `canPlayType('audio/webm; codecs=opus')` with `"probably"`, so a `<source>`
 list with `.webm` first means Safari *chooses* the broken path.
 
-**Do:** serve `.m4a` to WebKit (Safari, iOS, and the in-app browsers built on it — Instagram
+**Do:** serve `.m4a` to WebKit (Safari, *every* iOS browser whatever its UA says — Chrome,
+Firefox and Edge on iOS are WebKit too — and the in-app browsers built on it — Instagram
 is the main traffic source) and Opus/WebM to everyone else. Set `el.src` directly rather than
 `<source>` children, and create media elements *after* the AudioContext exists.
 

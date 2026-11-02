@@ -63,10 +63,15 @@ const FALLBACK_ONE_SHOTS = [
 ];
 
 function isWebKit(): boolean {
+  // Every browser on iOS/iPadOS is WebKit underneath, whatever its UA brands itself as —
+  // Chrome (CriOS), Firefox (FxiOS), Edge (EdgiOS), and the in-app browsers (Instagram is the
+  // main traffic source). They, and desktop Safari, all report Apple as the vendor.
+  if (navigator.vendor === 'Apple Computer, Inc.') return true;
   const ua = navigator.userAgent;
-  // Apple's browsers — Safari, iOS, and the in-app browsers built on it (Instagram is the
-  // main traffic source) — all identify as WebKit but not as Chromium/Firefox.
-  return /WebKit/.test(ua) && !/(Chrome|Chromium|CriOS|Edg|EdgA|OPR|Opera|Firefox|FxiOS)/.test(ua);
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  // iPadOS asks for desktop sites and identifies as a Mac; touch gives it away.
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return /WebKit/.test(ua) && !/(Chrome|Chromium|Edg|OPR|Opera|Firefox)/.test(ua);
 }
 
 /*
