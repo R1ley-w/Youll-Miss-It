@@ -28,6 +28,12 @@ export interface Layout {
   ledges: Ledge[];
   steppingStones: SteppingStone[];
   physics: { moveSpeed: number; jumpVelocity: number; gravityY: number };
+  /**
+   * How close Greg must be to a chest before its song becomes audible. A separate field from
+   * PROXIMITY_RADIUS (the tap radius) because the two maps are shaped nothing alike and this
+   * one is a musical, ear-tuned value.
+   */
+  audioRadius: number;
 }
 
 // Both layouts are read off their background's 16px tile grid. Ledges are listed in climb
@@ -51,6 +57,8 @@ export const PORTRAIT: Layout = {
   steppingStones: [],
   // Clears the tallest gap (128px, streaming -> socials) with a 146px rise.
   physics: { moveSpeed: 140, jumpVelocity: -520, gravityY: 900 },
+  // Spawn sits 213px from the nearest chest, just outside this field — land hearing only drips.
+  audioRadius: 210,
 };
 
 export const LANDSCAPE: Layout = {
@@ -81,6 +89,8 @@ export const LANDSCAPE: Layout = {
   // Tallest gap here is only 96px, so a 128px rise leaves comfortable margin. Faster walk
   // because the world is twice as wide.
   physics: { moveSpeed: 170, jumpVelocity: -480, gravityY: 900 },
+  // Spawn sits 219px from the nearest chest, just outside this field.
+  audioRadius: 210,
 };
 
 /**
