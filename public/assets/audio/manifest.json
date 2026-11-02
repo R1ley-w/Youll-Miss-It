@@ -1,0 +1,131 @@
+{
+  "tracks": {
+    "merch": {
+      "startAt": 31,
+      "duration": 90,
+      "lufs": -11.13,
+      "sourceTruePeak": -0.06,
+      "shippedTruePeak": {
+        "webm": -1.97,
+        "m4a": -1.52
+      },
+      "link": "https://www.facebook.com/youllmissitband",
+      "source": "1 Snowy On Mothers Day Artmix 1.0.wav"
+    },
+    "youtube": {
+      "startAt": 11,
+      "duration": 90,
+      "lufs": -10.83,
+      "sourceTruePeak": 0.03,
+      "shippedTruePeak": {
+        "webm": -1.71,
+        "m4a": -1.53
+      },
+      "link": "https://www.youtube.com/@youllmissitband",
+      "source": "4 Don't Worry Its Just Physical Pain Artmix 1.1.wav"
+    },
+    "featured": {
+      "startAt": 135,
+      "duration": 90,
+      "lufs": -10.85,
+      "sourceTruePeak": 0.17,
+      "shippedTruePeak": {
+        "webm": -2.08,
+        "m4a": -1.93
+      },
+      "link": "https://www.youtube.com/watch?v=uWf9XiMkqKM",
+      "source": "12 When The Colours Change Artmix 1.2.wav"
+    },
+    "streaming": {
+      "startAt": 11,
+      "duration": 90,
+      "lufs": -12.2,
+      "sourceTruePeak": 0.17,
+      "shippedTruePeak": {
+        "webm": -2.57,
+        "m4a": -2.02
+      },
+      "link": "https://open.spotify.com/artist/7j7orpegluM2SitFkmRehM",
+      "source": "9 San Francisco Artmix 1.3.wav"
+    },
+    "socials": {
+      "startAt": 0,
+      "duration": 90,
+      "lufs": -10.19,
+      "sourceTruePeak": 0.11,
+      "shippedTruePeak": {
+        "webm": -1.73,
+        "m4a": -1.56
+      },
+      "link": "https://www.instagram.com/youllmissitband/",
+      "source": "2 Happy So Happy So Artmix 1.1.wav"
+    },
+    "completion": {
+      "startAt": 0,
+      "duration": 245.25,
+      "lufs": -11.44,
+      "sourceTruePeak": 0.24,
+      "shippedTruePeak": {
+        "webm": -2.21,
+        "m4a": -1.38
+      },
+      "link": null,
+      "source": "10 Weather Artmix 1.1.wav"
+    }
+  },
+  "ambient": {
+    "oneShots": [
+      {
+        "name": "drip-1",
+        "duration": 0.156
+      },
+      {
+        "name": "drip-2",
+        "duration": 0.197
+      },
+      {
+        "name": "drip-3",
+        "duration": 0.183
+      },
+      {
+        "name": "drip-4",
+        "duration": 0.152
+      },
+      {
+        "name": "drip-5",
+        "duration": 0.149
+      },
+      {
+        "name": "drip-6",
+        "duration": 0.163
+      },
+      {
+        "name": "chain-1",
+        "duration": 1.351
+      },
+      {
+        "name": "chain-2",
+        "duration": 2.619
+      },
+      {
+        "name": "creak",
+        "duration": 1.889
+      }
+    ],
+    "bed": {
+      "duration": 31.75,
+      "seamless": true
+    }
+  },
+  "sfx": {
+    "chest_open": {
+      "duration": 1.882
+    },
+    "prize_collect": {
+      "duration": 0.127
+    },
+    "landing": {
+      "duration": 0.176
+    }
+  }
+}
