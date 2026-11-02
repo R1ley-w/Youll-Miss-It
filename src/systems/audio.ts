@@ -158,8 +158,9 @@ class AudioEngine {
     button?.addEventListener('click', () => this.toggleMute());
 
     // Unlock is retried on every gesture rather than once: Chrome can reject the first
-    // resume() when it doesn't count that event as a user activation, so the listeners stay
-    // alive until the context is genuinely running. unlock() is idempotent.
+    // resume() when it doesn't count that event as a user activation. The listeners stay for
+    // the whole session — after unlocking they're a cheap no-op, and they still let a gesture
+    // revive a context the OS interrupted (an iOS phone call). unlock() is idempotent.
     const gesture = () => void this.unlock();
     window.addEventListener('pointerdown', gesture);
     window.addEventListener('mousedown', gesture);
@@ -341,7 +342,14 @@ class AudioEngine {
     // gesture retry rather than loading the bed against a still-frozen clock.
     if (this.ctx.state !== 'running') return;
 
-    if (this.unlocked) return;
+    if (this.unlocked) {
+      // A resume that failed on tab return left the one-shots unscheduled; a gesture that
+      // finally gets the context running picks them back up.
+      if (this.oneShotTimer === null && document.visibilityState === 'visible') {
+        this.scheduleOneShots();
+      }
+      return;
+    }
     this.unlocked = true;
 
     await this.loadBuffers();
