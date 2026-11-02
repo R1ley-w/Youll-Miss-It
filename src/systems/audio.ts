@@ -290,11 +290,13 @@ class AudioEngine {
     track.el.currentTime = 0;
     track.el.onended = () => this.endCompletion();
 
-    void this.resumeContext().then((running) => {
-      if (!running) return;
+    void this.resumeContext().then(async (running) => {
+      // If the track can't start, onended never fires — give proximity back instead of
+      // leaving the mix suspended for the rest of the session.
+      if (!running) return this.endCompletion();
       this.setGain(this.bedGain!, 0, PROXIMITY_TC);
-      void this.playElement(track.el, COMPLETION);
       this.setGain(track.gain, 1, CROSSFADE_TC);
+      if (!(await this.playElement(track.el, COMPLETION))) this.endCompletion();
     });
   }
 
