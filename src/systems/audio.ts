@@ -227,7 +227,7 @@ class AudioEngine {
     if (track) this.setGain(track.gain, level, timeConstant);
     this.setGain(this.bedGain!, BED_BASE * (1 - level), timeConstant);
 
-    if (this.activeChest && level > 0.05) this.accumulateHeard(this.activeChest, dt);
+    if (this.activeChest && level > 0.05 && !this.muted) this.accumulateHeard(this.activeChest, dt);
   }
 
   /** Reward beat, part one: bed ducks, chest creaks, the song seeks to its hook and swells. */
