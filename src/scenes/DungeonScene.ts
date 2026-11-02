@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Inventory, ItemId, ALL_ITEM_IDS } from '../systems/Inventory';
 import { trackEvent } from '../systems/analytics';
 import { getLinkUrl } from '../systems/links';
+import { audio } from '../systems/audio';
 import { Layout, Ledge } from '../layouts';
 import { PROXIMITY_RADIUS, TILE } from '../constants';
 
@@ -9,7 +10,7 @@ import { PROXIMITY_RADIUS, TILE } from '../constants';
 // prize sequence still fires when they come back.
 const PENDING_KEY = 'ymi-pending-v1';
 
-const SEQUENCE_MS = 1000;
+const SEQUENCE_MS = 1400;
 
 const PRIZE_SRC: Record<ItemId, string> = {
   merch: '/assets/prizes/Shirt.png',
@@ -51,6 +52,7 @@ export class DungeonScene extends Phaser.Scene {
   private nearLedge: Ledge | null = null;
   private sequenceRunning = false;
   private hintDismissed = false;
+  private wasOnGround = true;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: {
@@ -102,6 +104,8 @@ export class DungeonScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, this.layout.width, this.layout.height);
     this.add.image(0, 0, 'bg').setOrigin(0, 0).setDepth(-10);
 
+    audio.setLayout(this.layout);
+
     this.buildAnimations();
     this.buildPlatforms();
     this.buildChests();
@@ -128,6 +132,8 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   update() {
+    audio.update(this.player.x, this.player.y);
+
     if (this.sequenceRunning) {
       this.playerBody.setVelocityX(0);
       this.updateProximity();
@@ -159,6 +165,9 @@ export class DungeonScene extends Phaser.Scene {
     if (jumpPressed && onGround) {
       this.playerBody.setVelocityY(jumpVelocity);
     }
+
+    if (onGround && !this.wasOnGround) audio.landing();
+    this.wasOnGround = onGround;
 
     if (left || right || jumpPressed) this.dismissHint();
 
@@ -379,6 +388,8 @@ export class DungeonScene extends Phaser.Scene {
     this.playerBody.setVelocityX(0);
     this.prompt.setVisible(false);
 
+    audio.beginReward(id);
+
     this.player.play('reward', true);
 
     const prize = this.add.image(this.player.x, this.player.y - 22, prizeTexture(id)).setDepth(20);
@@ -393,9 +404,13 @@ export class DungeonScene extends Phaser.Scene {
 
     this.time.delayedCall(SEQUENCE_MS, () => {
       this.inventory.collect(id);
+      audio.completeReward();
       this.openedChests.get(id)?.setVisible(true);
       this.renderInventoryUI();
       this.sequenceRunning = false;
+
+      const collected = ALL_ITEM_IDS.filter((i) => this.inventory.has(i)).length;
+      if (collected === 4) audio.preloadCompletion();
       if (this.inventory.isComplete()) this.showCompletion();
     });
   }
@@ -427,6 +442,7 @@ export class DungeonScene extends Phaser.Scene {
   private showCompletion() {
     trackEvent('collection_complete');
     document.getElementById('completion-overlay')?.classList.add('visible');
+    audio.playCompletion();
     this.spawnConfetti();
   }
 

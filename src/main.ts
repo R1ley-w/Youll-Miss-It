@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import { DungeonScene } from './scenes/DungeonScene';
 import { Layout, pickLayout } from './layouts';
+import { audio } from './systems/audio';
+
+// The audio engine lives outside the game, so it is wired up once here rather than per scene.
+audio.init();
 
 function buildGame(layout: Layout): Phaser.Game {
   document.body.classList.toggle('layout-landscape', layout.id === 'landscape');
