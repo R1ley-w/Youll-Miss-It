@@ -28,6 +28,8 @@ const PROXIMITY_TC = 0.12; // how fast a song tracks Greg's distance (s)
 const CROSSFADE_TC = 0.8; // how long a track swap crossfades (s)
 const CROSSFADE_MS = CROSSFADE_TC * 1000;
 const RELEASE_AFTER_MS = 3000; // how long a fading track is kept before release
+const EVICT_TC = 0.05; // fast fade for a third track pushed out by a quick double swap (s)
+const EVICT_RELEASE_MS = 300; // ...and how long it gets before release
 const REWARD_DUCK_TC = 0.1; // bed cut at the start of the reward beat (s)
 const REWARD_HOLD_DUCK_TC = 0.15; // bed held down while the reward beat runs (s)
 const HYSTERESIS = 20; // px of slack before the "nearest chest" flips
@@ -116,8 +118,8 @@ class AudioEngine {
   private oneShotNames: string[] = [];
 
   private tracks = new Map<SongKey, Track>();
-  private fading: SongKey | null = null;
-  private fadeTimer: number | null = null;
+  // Songs fading out, each with its pending release. Usually one; briefly two during an eviction.
+  private releaseTimers = new Map<SongKey, number>();
   // Songs that were playing when the tab hid, to pick back up mid-song on return.
   private pausedForHide = new Set<SongKey>();
 
@@ -530,11 +532,7 @@ class AudioEngine {
   }
 
   private startSong(key: SongKey) {
-    if (this.fading === key) {
-      if (this.fadeTimer !== null) window.clearTimeout(this.fadeTimer);
-      this.fadeTimer = null;
-      this.fading = null;
-    }
+    this.cancelRelease(key);
     const track = this.ensureSong(key);
     track.el.currentTime = 0; // re-entering a field restarts the track at its hook, every time
     void this.playElement(track.el, key);
@@ -547,21 +545,37 @@ class AudioEngine {
   }
 
   private fadeOut(key: SongKey) {
-    if (this.fading && this.fading !== key) this.releaseSong(this.fading);
-    this.fading = key;
-    const track = this.tracks.get(key);
-    if (track) this.setGain(track.gain, 0, CROSSFADE_TC);
+    // Max two songs loaded: anything still fading from an earlier swap is hurried off with a
+    // short fade rather than cut dead, so a fast traversal never pops an audible track.
+    for (const other of [...this.releaseTimers.keys()]) {
+      if (other !== key) this.scheduleRelease(other, EVICT_TC, EVICT_RELEASE_MS);
+    }
+    this.scheduleRelease(key, CROSSFADE_TC, RELEASE_AFTER_MS);
+  }
 
-    if (this.fadeTimer !== null) window.clearTimeout(this.fadeTimer);
-    this.fadeTimer = window.setTimeout(() => {
-      if (this.fading === key) {
-        this.fading = null;
+  private scheduleRelease(key: SongKey, timeConstant: number, afterMs: number) {
+    const track = this.tracks.get(key);
+    if (!track) return;
+    this.setGain(track.gain, 0, timeConstant);
+    this.cancelRelease(key);
+    this.releaseTimers.set(
+      key,
+      window.setTimeout(() => {
+        this.releaseTimers.delete(key);
         this.releaseSong(key);
-      }
-    }, RELEASE_AFTER_MS);
+      }, afterMs)
+    );
+  }
+
+  private cancelRelease(key: SongKey) {
+    const timer = this.releaseTimers.get(key);
+    if (timer === undefined) return;
+    window.clearTimeout(timer);
+    this.releaseTimers.delete(key);
   }
 
   private releaseSong(key: SongKey) {
+    this.cancelRelease(key);
     this.pausedForHide.delete(key);
     const track = this.tracks.get(key);
     if (!track) return;
