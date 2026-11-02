@@ -129,15 +129,15 @@ class AudioEngine {
     const button = document.getElementById('mute-button');
     button?.addEventListener('click', () => this.toggleMute());
 
-    const unlock = () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('touchstart', unlock);
-      void this.unlock();
-    };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('touchstart', unlock);
+    // Unlock is retried on every gesture rather than once: Chrome can reject the first
+    // resume() when it doesn't count that event as a user activation, so the listeners stay
+    // alive until the context is genuinely running. unlock() is idempotent.
+    const gesture = () => void this.unlock();
+    window.addEventListener('pointerdown', gesture);
+    window.addEventListener('mousedown', gesture);
+    window.addEventListener('touchstart', gesture);
+    window.addEventListener('keydown', gesture);
+    window.addEventListener('click', gesture);
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
@@ -304,29 +304,40 @@ class AudioEngine {
   // -------------------------------------------------------------------------
 
   private async unlock() {
-    if (this.unlocked || this.ctx) return;
+    if (!this.ctx) {
+      const ctx = new AudioContext();
+      this.ctx = ctx;
+      this.master = ctx.createGain();
+      this.master.gain.value = 0;
+      this.master.connect(ctx.destination);
+
+      this.bedGain = ctx.createGain();
+      this.bedGain.gain.value = 0;
+      this.bedGain.connect(this.master);
+    }
+
+    if (this.ctx.state !== 'running') {
+      await this.resumeContext();
+    }
+    // Chrome can reject the resume without a recognised gesture; bail and let the next
+    // gesture retry rather than loading the bed against a still-frozen clock.
+    if (this.ctx.state !== 'running') return;
+
+    if (this.unlocked) return;
     this.unlocked = true;
 
-    const ctx = new AudioContext();
-    this.ctx = ctx;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0;
-    this.master.connect(ctx.destination);
-
-    this.bedGain = ctx.createGain();
-    this.bedGain.gain.value = 0;
-    this.bedGain.connect(this.master);
-
-    await this.resumeContext();
     await this.loadBuffers();
-
     this.startBed();
     this.setGain(this.bedGain!, BED_BASE, 0.2);
     this.scheduleOneShots();
 
     this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
     this.masterTc = this.muted ? 0.1 : MASTER_FADE_TC;
-    console.info('[audio] unlocked', { state: ctx.state, muted: this.muted, buffers: this.buffers.size });
+    console.info('[audio] unlocked', {
+      state: this.ctx.state,
+      muted: this.muted,
+      buffers: this.buffers.size,
+    });
   }
 
   /**
