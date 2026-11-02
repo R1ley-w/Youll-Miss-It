@@ -33,6 +33,7 @@ function buildGame(layout: Layout): Phaser.Game {
   // Dev-only handle for inspecting/driving the game from the console. Stripped from prod builds.
   if (import.meta.env.DEV) {
     (window as unknown as { game: Phaser.Game }).game = game;
+    (window as unknown as { audio: typeof audio }).audio = audio;
   }
   return game;
 }

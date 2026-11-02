@@ -570,6 +570,22 @@ class AudioEngine {
     button.setAttribute('aria-label', this.muted ? 'Unmute audio' : 'Mute audio');
     button.title = this.muted ? 'Unmute' : 'Mute';
   }
+
+  /** Dev-only snapshot of internal state, for headless/inspector diagnosis of silent failures. */
+  debug() {
+    return {
+      unlocked: this.unlocked,
+      muted: this.muted,
+      ctxState: this.ctx?.state ?? null,
+      masterGain: this.master?.gain.value ?? null,
+      bedGain: this.bedGain?.gain.value ?? null,
+      manifestLoaded: this.manifest !== null,
+      oneShotNames: this.oneShotNames,
+      buffersLoaded: [...this.buffers.keys()],
+      activeChest: this.activeChest,
+      songsLoaded: [...this.songs.keys()],
+    };
+  }
 }
 
 export const audio = new AudioEngine();
