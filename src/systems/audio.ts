@@ -18,15 +18,24 @@ import { trackEvent } from './analytics';
 
 const MASTER_DEFAULT = 0.9; // master gain at full volume
 const MASTER_FADE_TC = 0.45; // ~1.5s auto-start fade-in on the first gesture
+const MASTER_UNMUTE_TC = 0.3; // fade back in after an unmute (s)
+const MASTER_MUTE_TC = 0.1; // fade out on mute (s)
 const BED_BASE = 0.4; // ambient bed level when no song is audible (ducked by song)
+const BED_FADE_IN_TC = 0.2; // bed coming up after unlock (s)
 const SFX_GAIN = 0.8; // one-shot level relative to music
 
 const PROXIMITY_TC = 0.12; // how fast a song tracks Greg's distance (s)
 const CROSSFADE_TC = 0.8; // how long a track swap crossfades (s)
 const CROSSFADE_MS = CROSSFADE_TC * 1000;
 const RELEASE_AFTER_MS = 3000; // how long a fading track is kept before release
+const REWARD_DUCK_TC = 0.1; // bed cut at the start of the reward beat (s)
+const REWARD_HOLD_DUCK_TC = 0.15; // bed held down while the reward beat runs (s)
 const HYSTERESIS = 20; // px of slack before the "nearest chest" flips
 const GAIN_EXPONENT = 1.5; // gain curve ≈ (1 − d/R)^1.5
+
+const SCHEDULE_LEAD = 0.05; // every ramp starts this far ahead of ctx.currentTime (s)
+const RESUME_TIMEOUT_MS = 3000; // how long to poll for `running` after resume()
+const RESUME_POLL_MS = 50;
 
 const ONE_SHOT_MIN_MS = 4000;
 const ONE_SHOT_MAX_MS = 12000;
@@ -46,7 +55,17 @@ interface AudioManifest {
   ambient: { oneShots: OneShotEntry[] };
 }
 
+type AssetDir = 'ambient' | 'sfx';
+
 const SFX_NAMES = ['chest_open', 'prize_collect', 'landing'] as const;
+type SfxName = (typeof SFX_NAMES)[number];
+
+/** A song's media element and the two nodes that route it into the graph — always together. */
+interface Track {
+  el: HTMLAudioElement;
+  source: MediaElementAudioSourceNode;
+  gain: GainNode;
+}
 
 // Fallback one-shot list if the manifest can't be fetched. The manifest is authoritative
 // (the count is a property of the source recordings), but losing it must not silence the bed.
@@ -96,23 +115,21 @@ class AudioEngine {
   private buffers = new Map<string, AudioBuffer>();
   private oneShotNames: string[] = [];
 
-  private songs = new Map<SongKey, HTMLAudioElement>();
-  private songSources = new Map<SongKey, MediaElementAudioSourceNode>();
-  private songGains = new Map<SongKey, GainNode>();
+  private tracks = new Map<SongKey, Track>();
+  private fading: SongKey | null = null;
+  private fadeTimer: number | null = null;
 
-  private manifest: AudioManifest | null = null;
+  private manifestLoaded = false;
   private unlocked = false;
   private muted = false;
 
   private masterTarget = 0;
-  private masterTc = MASTER_FADE_TC;
+  private masterTimeConstant = MASTER_FADE_TC;
 
   private radius = 210;
   private chestCenters = new Map<ItemId, { x: number; y: number }>();
 
   private activeChest: ItemId | null = null;
-  private fading: SongKey | null = null;
-  private fadeTimer: number | null = null;
   private swapUntil = 0;
 
   private rewardActive = false;
@@ -120,8 +137,8 @@ class AudioEngine {
 
   private oneShotTimer: number | null = null;
   private lastUpdateTime = 0;
-  private heardMs = new Map<string, number>();
-  private heardFired = new Set<string>();
+  private heardMs = new Map<ItemId, number>();
+  private heardFired = new Set<ItemId>();
 
   /**
    * Called once at startup: wires the mute button, the first-gesture unlock and the
@@ -165,10 +182,7 @@ class AudioEngine {
 
     // On a layout swap (rotate) Greg respawns outside every field, so the generic rules fade
     // the current song out and bring the bed back up — no special-casing here.
-    if (this.activeChest) {
-      this.fadeOut(this.activeChest);
-      this.activeChest = null;
-    }
+    this.setActive(null);
   }
 
   update(x: number, y: number) {
@@ -183,20 +197,20 @@ class AudioEngine {
     // The master is synced every frame rather than set once, because the single fade-in in
     // unlock() can fire while WebKit's clock is still frozen and be silently dropped. This
     // way the mix comes up the instant the context is genuinely running, no matter how late.
-    this.setGain(this.master!, this.masterTarget, this.masterTc);
+    this.setGain(this.master!, this.masterTarget, this.masterTimeConstant);
 
     if (this.completionActive) return;
 
     if (this.rewardActive) {
-      if (this.activeChest) this.setGain(this.songGains.get(this.activeChest)!, 1, CROSSFADE_TC);
-      this.setGain(this.bedGain!, 0, 0.15);
+      const track = this.activeChest && this.tracks.get(this.activeChest);
+      if (track) this.setGain(track.gain, 1, CROSSFADE_TC);
+      this.setGain(this.bedGain!, 0, REWARD_HOLD_DUCK_TC);
       return;
     }
 
     const desired = this.pickChest(x, y);
     if (desired !== this.activeChest) {
-      if (this.activeChest) this.fadeOut(this.activeChest);
-      this.activeChest = desired;
+      this.setActive(desired);
       if (desired) {
         this.startSong(desired);
         this.swapUntil = now + CROSSFADE_MS;
@@ -204,10 +218,11 @@ class AudioEngine {
     }
 
     const level = this.activeChest ? this.gainCurve(this.distTo(this.activeChest, x, y)) : 0;
-    const tc = now < this.swapUntil ? CROSSFADE_TC : PROXIMITY_TC;
+    const timeConstant = now < this.swapUntil ? CROSSFADE_TC : PROXIMITY_TC;
 
-    if (this.activeChest) this.setGain(this.songGains.get(this.activeChest)!, level, tc);
-    this.setGain(this.bedGain!, BED_BASE * (1 - level), tc);
+    const track = this.activeChest && this.tracks.get(this.activeChest);
+    if (track) this.setGain(track.gain, level, timeConstant);
+    this.setGain(this.bedGain!, BED_BASE * (1 - level), timeConstant);
 
     if (this.activeChest && level > 0.05) this.accumulateHeard(this.activeChest, dt);
   }
@@ -220,19 +235,18 @@ class AudioEngine {
       this.rewardActive = true;
 
       if (this.activeChest !== id) {
-        if (this.activeChest) this.fadeOut(this.activeChest);
-        this.activeChest = id;
+        this.setActive(id);
         this.startSong(id);
       } else {
-        const el = this.songs.get(id);
-        if (el) {
-          el.currentTime = 0; // the shipped file already begins at the hook
-          this.playElement(el, id);
+        const track = this.tracks.get(id);
+        if (track) {
+          track.el.currentTime = 0; // the shipped file already begins at the hook
+          void this.playElement(track.el, id);
         }
       }
 
-      this.setGain(this.songGains.get(id)!, 1, CROSSFADE_TC);
-      this.setGain(this.bedGain!, 0, 0.1);
+      this.setGain(this.tracks.get(id)!.gain, 1, CROSSFADE_TC);
+      this.setGain(this.bedGain!, 0, REWARD_DUCK_TC);
       this.playSfx('chest_open');
     });
   }
@@ -247,7 +261,7 @@ class AudioEngine {
     this.playSfx('landing');
   }
 
-  /** Lazy-load the completion track once the fourth item is collected. */
+  /** Lazy-load the completion track once the fourth item is collected. Idempotent. */
   preloadCompletion() {
     if (!this.ctx) return;
     this.ensureSong(COMPLETION);
@@ -261,27 +275,18 @@ class AudioEngine {
     if (!this.ctx) return;
     this.completionActive = true;
     this.rewardActive = false;
+    this.setActive(null);
 
-    if (this.activeChest) {
-      this.fadeOut(this.activeChest);
-      this.activeChest = null;
-    }
-
-    this.ensureSong(COMPLETION);
-    const el = this.songs.get(COMPLETION)!;
-    el.loop = false;
-    el.currentTime = 0;
-    el.onended = () => {
-      this.completionActive = false;
-      this.releaseSong(COMPLETION);
-      this.lastUpdateTime = 0;
-    };
+    const track = this.ensureSong(COMPLETION);
+    track.el.loop = false;
+    track.el.currentTime = 0;
+    track.el.onended = () => this.endCompletion();
 
     void this.resumeContext().then((running) => {
       if (!running) return;
       this.setGain(this.bedGain!, 0, PROXIMITY_TC);
-      this.playElement(el, COMPLETION);
-      this.setGain(this.songGains.get(COMPLETION)!, 1, CROSSFADE_TC);
+      void this.playElement(track.el, COMPLETION);
+      this.setGain(track.gain, 1, CROSSFADE_TC);
     });
   }
 
@@ -294,8 +299,7 @@ class AudioEngine {
     }
     this.updateMuteButton();
 
-    this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
-    this.masterTc = this.muted ? 0.1 : 0.3;
+    this.setMasterTarget(MASTER_UNMUTE_TC);
     if (this.muted) {
       trackEvent('audio_muted');
     } else if (this.ctx) {
@@ -333,11 +337,10 @@ class AudioEngine {
 
     await this.loadBuffers();
     this.startBed();
-    this.setGain(this.bedGain!, BED_BASE, 0.2);
+    this.setGain(this.bedGain!, BED_BASE, BED_FADE_IN_TC);
     this.scheduleOneShots();
 
-    this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
-    this.masterTc = this.muted ? 0.1 : MASTER_FADE_TC;
+    this.setMasterTarget(MASTER_FADE_TC);
     console.info('[audio] unlocked', {
       state: this.ctx.state,
       muted: this.muted,
@@ -360,13 +363,13 @@ class AudioEngine {
         return false;
       }
     }
-    const deadline = performance.now() + 3000;
+    const deadline = performance.now() + RESUME_TIMEOUT_MS;
     while (ctx.state !== 'running') {
       if (performance.now() > deadline) {
         console.warn('[audio] context did not reach "running" in time', ctx.state);
         return false;
       }
-      await sleep(50);
+      await sleep(RESUME_POLL_MS);
     }
     return true;
   }
@@ -379,17 +382,17 @@ class AudioEngine {
       const manifest = (await fetch('/assets/audio/manifest.json').then((r) =>
         r.json()
       )) as AudioManifest;
-      this.manifest = manifest;
+      this.manifestLoaded = true;
       this.oneShotNames = manifest.ambient.oneShots.map((o) => o.name);
     } catch (err) {
       console.error('[audio] manifest load failed, using fallback one-shots', err);
       this.oneShotNames = FALLBACK_ONE_SHOTS;
     }
 
-    const targets = [
+    const targets: { name: string; dir: AssetDir }[] = [
       { name: 'bed', dir: 'ambient' },
-      ...this.oneShotNames.map((name) => ({ name, dir: 'ambient' })),
-      ...SFX_NAMES.map((name) => ({ name, dir: 'sfx' })),
+      ...this.oneShotNames.map((name) => ({ name, dir: 'ambient' as const })),
+      ...SFX_NAMES.map((name) => ({ name, dir: 'sfx' as const })),
     ];
     await Promise.all(targets.map(({ name, dir }) => this.loadBuffer(name, dir, exts)));
   }
@@ -399,7 +402,7 @@ class AudioEngine {
    * is about media elements, but decoding is its own gamble. Try the preferred format, then
    * fall back to the other, so a codec gap can't take the bed down with it.
    */
-  private async loadBuffer(name: string, dir: string, exts: string[]): Promise<void> {
+  private async loadBuffer(name: string, dir: AssetDir, exts: string[]): Promise<void> {
     for (const ext of exts) {
       try {
         const res = await fetch(`/assets/audio/${dir}/${name}.${ext}`);
@@ -441,31 +444,41 @@ class AudioEngine {
   }
 
   private playRandomOneShot() {
-    if (!this.ctx || this.ctx.state !== 'running') return;
     if (this.oneShotNames.length === 0) return;
     const name = this.oneShotNames[Math.floor(Math.random() * this.oneShotNames.length)];
-    this.playSfx(name);
+    this.playBuffer(name, this.master!, SFX_GAIN);
   }
 
-  private playSfx(name: string) {
+  private playSfx(name: SfxName) {
+    this.playBuffer(name, this.master!, SFX_GAIN);
+  }
+
+  private playBuffer(name: string, destination: AudioNode, level: number) {
     const buf = this.buffers.get(name);
     if (!buf || !this.ctx || this.ctx.state !== 'running') return;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const gain = this.ctx.createGain();
-    gain.gain.value = SFX_GAIN;
-    src.connect(gain).connect(this.master!);
+    gain.gain.value = level;
+    src.connect(gain).connect(destination);
     src.start();
   }
 
-  private playElement(el: HTMLAudioElement, label: string) {
-    el.play().catch((err) => {
-      console.warn(`[audio] play() rejected for ${label}`, err);
-    });
+  /** Resolves false when the browser refuses playback, so callers can back out. */
+  private playElement(el: HTMLAudioElement, label: string): Promise<boolean> {
+    return el.play().then(
+      () => true,
+      (err) => {
+        console.warn(`[audio] play() rejected for ${label}`, err);
+        return false;
+      }
+    );
   }
 
-  private ensureSong(key: SongKey) {
-    if (this.songs.has(key) || !this.ctx) return;
+  private ensureSong(key: SongKey): Track {
+    const existing = this.tracks.get(key);
+    if (existing) return existing;
+    const ctx = this.ctx!;
     const el = new Audio();
     el.preload = 'auto';
     el.src = `/assets/audio/tracks/${key}.${pickExt()}`;
@@ -473,14 +486,14 @@ class AudioEngine {
 
     // Media elements are created only after the AudioContext exists, and their src is set
     // directly rather than via <source> children — both part of avoiding the WebKit bug.
-    const source = this.ctx.createMediaElementSource(el);
-    const gain = this.ctx.createGain();
+    const source = ctx.createMediaElementSource(el);
+    const gain = ctx.createGain();
     gain.gain.value = 0;
     source.connect(gain).connect(this.master!);
 
-    this.songs.set(key, el);
-    this.songSources.set(key, source);
-    this.songGains.set(key, gain);
+    const track = { el, source, gain };
+    this.tracks.set(key, track);
+    return track;
   }
 
   private startSong(key: SongKey) {
@@ -489,17 +502,22 @@ class AudioEngine {
       this.fadeTimer = null;
       this.fading = null;
     }
-    this.ensureSong(key);
-    const el = this.songs.get(key)!;
-    el.currentTime = 0; // re-entering a field restarts the track at its hook, every time
-    this.playElement(el, key);
+    const track = this.ensureSong(key);
+    track.el.currentTime = 0; // re-entering a field restarts the track at its hook, every time
+    void this.playElement(track.el, key);
+  }
+
+  /** Hand the active slot to `next`, fading out whatever held it. */
+  private setActive(next: ItemId | null) {
+    if (this.activeChest && this.activeChest !== next) this.fadeOut(this.activeChest);
+    this.activeChest = next;
   }
 
   private fadeOut(key: SongKey) {
     if (this.fading && this.fading !== key) this.releaseSong(this.fading);
     this.fading = key;
-    const gain = this.songGains.get(key);
-    if (gain) this.setGain(gain, 0, CROSSFADE_TC);
+    const track = this.tracks.get(key);
+    if (track) this.setGain(track.gain, 0, CROSSFADE_TC);
 
     if (this.fadeTimer !== null) window.clearTimeout(this.fadeTimer);
     this.fadeTimer = window.setTimeout(() => {
@@ -511,23 +529,32 @@ class AudioEngine {
   }
 
   private releaseSong(key: SongKey) {
-    const el = this.songs.get(key);
-    if (!el) return;
-    el.pause();
-    el.removeAttribute('src');
-    el.load();
-    this.songSources.get(key)?.disconnect();
-    this.songGains.get(key)?.disconnect();
-    this.songs.delete(key);
-    this.songSources.delete(key);
-    this.songGains.delete(key);
+    const track = this.tracks.get(key);
+    if (!track) return;
+    track.el.pause();
+    track.el.removeAttribute('src');
+    track.el.load();
+    track.source.disconnect();
+    track.gain.disconnect();
+    this.tracks.delete(key);
+  }
+
+  private endCompletion() {
+    this.completionActive = false;
+    this.releaseSong(COMPLETION);
+    this.lastUpdateTime = 0;
+  }
+
+  private setMasterTarget(unmutedTimeConstant: number) {
+    this.masterTarget = this.muted ? 0 : MASTER_DEFAULT;
+    this.masterTimeConstant = this.muted ? MASTER_MUTE_TC : unmutedTimeConstant;
   }
 
   private pickChest(x: number, y: number): ItemId | null {
     let nearest: ItemId | null = null;
     let nearestDist = Infinity;
-    for (const [key, c] of this.chestCenters) {
-      const d = Math.hypot(c.x - x, c.y - y);
+    for (const key of this.chestCenters.keys()) {
+      const d = this.distTo(key, x, y);
       if (d < this.radius && d < nearestDist) {
         nearest = key;
         nearestDist = d;
@@ -566,7 +593,7 @@ class AudioEngine {
   /** All gain changes go through setTargetAtTime — never gain.value per frame. */
   private setGain(gain: GainNode, value: number, timeConstant: number) {
     if (!this.ctx || this.ctx.state !== 'running' || !gain) return;
-    gain.gain.setTargetAtTime(value, this.ctx.currentTime + 0.05, timeConstant);
+    gain.gain.setTargetAtTime(value, this.ctx.currentTime + SCHEDULE_LEAD, timeConstant);
   }
 
   private loadMuted(): boolean {
@@ -595,11 +622,13 @@ class AudioEngine {
       ctxState: this.ctx?.state ?? null,
       masterGain: this.master?.gain.value ?? null,
       bedGain: this.bedGain?.gain.value ?? null,
-      manifestLoaded: this.manifest !== null,
+      manifestLoaded: this.manifestLoaded,
       oneShotNames: this.oneShotNames,
       buffersLoaded: [...this.buffers.keys()],
       activeChest: this.activeChest,
-      songsLoaded: [...this.songs.keys()],
+      songsLoaded: [...this.tracks.keys()],
+      rewardActive: this.rewardActive,
+      completionActive: this.completionActive,
     };
   }
 }
