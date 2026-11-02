@@ -133,6 +133,7 @@ class AudioEngine {
   private swapUntil = 0;
 
   private rewardActive = false;
+  private rewardBeat = 0;
   private completionActive = false;
 
   private oneShotTimer: number | null = null;
@@ -181,7 +182,9 @@ class AudioEngine {
     );
 
     // On a layout swap (rotate) Greg respawns outside every field, so the generic rules fade
-    // the current song out and bring the bed back up — no special-casing here.
+    // the current song out and bring the bed back up — no special-casing here. The rebuild
+    // also destroys the scene's reward timer, so completeReward() is never coming: end it here.
+    this.rewardActive = false;
     this.setActive(null);
   }
 
@@ -230,9 +233,14 @@ class AudioEngine {
   /** Reward beat, part one: bed ducks, chest creaks, the song seeks to its hook and swells. */
   beginReward(id: ItemId) {
     if (!this.ctx) return;
+    // Open the beat synchronously. completeReward() closes it on the scene's clock, and a
+    // resume that only settles after that (WebKit, straight after the tab comes back) must
+    // not re-open it — proximity would stay frozen and the bed ducked for good.
+    this.rewardActive = true;
+    const beat = ++this.rewardBeat;
+
     void this.resumeContext().then((running) => {
-      if (!running) return;
-      this.rewardActive = true;
+      if (!running || !this.rewardActive || beat !== this.rewardBeat) return;
 
       if (this.activeChest !== id) {
         this.setActive(id);
