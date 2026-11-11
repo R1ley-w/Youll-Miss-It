@@ -6,19 +6,19 @@
     <title>You'll Miss It!</title>
     <meta
       name="description"
-      content="Official site for You'll Miss It! — explore the dungeon to find our merch, music, videos and more."
+      content="You'll Miss It! Band"
     />
     <meta property="og:title" content="You'll Miss It!" />
     <meta
       property="og:description"
-      content="Explore the dungeon to find our merch, music, videos and more."
+      content="You'll Miss It! Band"
     />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="/src/style.css" />
     <!-- Only requested on first press otherwise, which would flash an empty button. -->
     <link rel="preload" as="image" href="/assets/Buttons_Inventory/button_clicked.png" />
-    <!-- Plausible analytics — replace data-domain with the real live domain before launch -->
-    <script defer data-domain="REPLACE_WITH_DOMAIN" src="https://plausible.io/js/script.js"></script>
+    <!-- Plausible analytics — data-domain must match the site registered in Plausible -->
+    <script defer data-domain="youllmissit.band" src="https://plausible.io/js/script.js"></script>
   </head>
   <body>
     <div id="game-container"></div>
@@ -47,11 +47,7 @@
       </svg>
     </button>
 
-    <!--
-      Single source of truth for every destination link, including the footer bar fallback below.
-      The in-game hotspots read these same hrefs at click-time via data-key, so updating a link
-      here (e.g. "featured" whenever there's a new song/video to push) updates everywhere at once.
-    -->
+    
     <nav id="footer-links" aria-label="Quick links">
       <a href="https://www.facebook.com/youllmissitband" data-key="merch" class="pixel-button" target="_blank" rel="noopener">Merch</a>
       <a href="https://www.youtube.com/@youllmissitband" data-key="youtube" class="pixel-button" target="_blank" rel="noopener">YouTube</a>
