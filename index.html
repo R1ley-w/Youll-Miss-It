@@ -15,6 +15,8 @@
     />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="/src/style.css" />
+    <!-- Only requested on first press otherwise, which would flash an empty button. -->
+    <link rel="preload" as="image" href="/assets/Buttons_Inventory/button_clicked.png" />
     <!-- Plausible analytics — replace data-domain with the real live domain before launch -->
     <script defer data-domain="REPLACE_WITH_DOMAIN" src="https://plausible.io/js/script.js"></script>
   </head>
@@ -32,7 +34,7 @@
 
     <div id="inventory-strip" aria-label="Collected items"></div>
 
-    <button id="mute-button" type="button" aria-label="Mute audio" aria-pressed="false" title="Mute">
+    <button id="mute-button" class="pixel-button" type="button" aria-label="Mute audio" aria-pressed="false" title="Mute">
       <svg class="icon-unmuted" viewBox="0 0 24 24" aria-hidden="true">
         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -51,18 +53,18 @@
       here (e.g. "featured" whenever there's a new song/video to push) updates everywhere at once.
     -->
     <nav id="footer-links" aria-label="Quick links">
-      <a href="https://www.facebook.com/youllmissitband" data-key="merch" target="_blank" rel="noopener">Merch</a>
-      <a href="https://www.youtube.com/@youllmissitband" data-key="youtube" target="_blank" rel="noopener">YouTube</a>
-      <a href="https://open.spotify.com/artist/7j7orpegluM2SitFkmRehM" data-key="streaming" target="_blank" rel="noopener">Listen</a>
-      <a href="https://www.instagram.com/youllmissitband/" data-key="socials" target="_blank" rel="noopener">Instagram</a>
-      <a href="https://www.youtube.com/watch?v=uWf9XiMkqKM" data-key="featured" target="_blank" rel="noopener">Featured</a>
+      <a href="https://www.facebook.com/youllmissitband" data-key="merch" class="pixel-button" target="_blank" rel="noopener">Merch</a>
+      <a href="https://www.youtube.com/@youllmissitband" data-key="youtube" class="pixel-button" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://open.spotify.com/artist/7j7orpegluM2SitFkmRehM" data-key="streaming" class="pixel-button" target="_blank" rel="noopener">Listen</a>
+      <a href="https://www.instagram.com/youllmissitband/" data-key="socials" class="pixel-button" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://www.youtube.com/watch?v=uWf9XiMkqKM" data-key="featured" class="pixel-button" target="_blank" rel="noopener">Featured</a>
     </nav>
 
     <div id="completion-overlay" class="overlay">
       <div class="overlay-card">
         <h2>Seems Like You Didn't Miss Anything</h2>
         <p>Thanks for exploring, Keep Watching 🖤</p>
-        <button id="completion-close" type="button">Back to Game</button>
+        <button id="completion-close" class="pixel-button" type="button">Back to Game</button>
       </div>
     </div>
 

@@ -3,9 +3,17 @@
 :root {
   color-scheme: dark;
   --font-pixel: 'Silkscreen', Helvetica, monospace;
+  --ink: #1a1410;
 
   /* CSS pixels per art pixel. Whole numbers only, or the hand-drawn pixels turn uneven. */
   --inv-px: 4px;
+  --btn-px: 2px;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --btn-px: 3px;
+  }
 }
 
 /* At 4x the bar runs under the mute button on the narrowest phones. */
@@ -122,6 +130,57 @@ body.layout-landscape .bg-extend {
 }
 
 /*
+  button_*.png are 32x32 canvases holding a 29x17 button at (2, 5), with a 3px rim that has
+  to stay unstretched: the rim is the only thing that differs between the two states. The
+  slices therefore include the transparent canvas margin, and this layer is pushed out by
+  that margin so the element's own box (and its tap target) is the drawn button.
+*/
+.pixel-button {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(var(--btn-px) * 17);
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pixel-button::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--btn-px) * -5) calc(var(--btn-px) * -1) calc(var(--btn-px) * -10) calc(var(--btn-px) * -2);
+  z-index: -1;
+  border-style: solid;
+  border-width: calc(var(--btn-px) * 8) calc(var(--btn-px) * 4) calc(var(--btn-px) * 13) calc(var(--btn-px) * 5);
+  border-image: url('/assets/Buttons_Inventory/button_unclicked.png') 8 4 13 5 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-button:active::before,
+.pixel-button:focus-visible::before {
+  border-image-source: url('/assets/Buttons_Inventory/button_clicked.png');
+}
+
+/* Gated so a tap on a phone doesn't leave the button stuck in its pressed look. */
+@media (hover: hover) {
+  .pixel-button:hover::before {
+    border-image-source: url('/assets/Buttons_Inventory/button_clicked.png');
+  }
+}
+
+.pixel-button:focus-visible {
+  outline: 2px solid #dc4e2b;
+  outline-offset: 1px;
+}
+
+/*
   The master mute lives as DOM chrome (like the inventory strip and footer), not inside the
   canvas — it must be visible from page load, before the audio has ever started.
 */
@@ -130,33 +189,18 @@ body.layout-landscape .bg-extend {
   top: max(10px, env(safe-area-inset-top));
   right: 12px;
   width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: rgba(0, 0, 0, 0.55);
-  border: 2px solid #dfdbd2;
-  border-radius: 4px;
-  cursor: pointer;
+  height: calc(var(--btn-px) * 17);
   z-index: 11;
-  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 #mute-button svg {
   width: 20px;
   height: 20px;
   fill: none;
-  stroke: #dc4e2b;
+  stroke: var(--ink);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-#mute-button:hover,
-#mute-button:active {
-  border-color: #dc4e2b;
-  background: rgba(0, 0, 0, 0.7);
 }
 
 #mute-button .icon-unmuted {
@@ -242,25 +286,25 @@ body.layout-landscape .bg-extend {
   right: 0;
   display: flex;
   justify-content: center;
-  flex-wrap: wrap;
   gap: 4px;
   padding: 8px 8px max(8px, env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.55);
   z-index: 10;
 }
 
-#footer-links a {
-  color: #f2e9dc;
-  text-decoration: none;
-  font-size: 13px;
-  padding: 4px 10px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.06);
+/* A phone on its side has no height to spare, and Greg's floor runs along the bottom of it. */
+@media (max-height: 500px) {
+  #footer-links {
+    padding-top: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
 }
 
-#footer-links a:hover,
-#footer-links a:active {
-  background: rgba(255, 255, 255, 0.16);
+#footer-links a {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: calc(var(--btn-px) * 44);
+  font-size: calc(var(--btn-px) * 4);
 }
 
 .overlay {
@@ -296,16 +340,12 @@ body.layout-landscape .bg-extend {
   font-size: 8px;
 }
 
+/* Capped so the button's stone texture is stretched no further than the footer's. */
 .overlay-card button {
-  margin-top: 16px;
-  padding: 10px 18px;
-  border: none;
-  border-radius: 2px;
-  background: #dc4e2b;
-  color: #1a1410;
-  font-family: inherit;
-  font-weight: bold;
-  cursor: pointer;
+  width: calc(var(--btn-px) * 64);
+  max-width: 100%;
+  margin: 16px auto 0;
+  font-size: calc(var(--btn-px) * 4);
 }
 
 .confetti-piece {
