@@ -1,0 +1,41 @@
+{
+	# Cloudflare Tunnel terminates TLS and talks plain HTTP to this container,
+	# so Caddy must not try to get certificates. No admin API means no writable
+	# state, which keeps the container compatible with read_only: true.
+	auto_https off
+	admin off
+}
+
+# Serves both hostnames; the tunnel forwards the public Host header.
+:8080 {
+	root * /srv
+
+	# The apex is canonical. Cloudflare sends the visitor over HTTPS, so
+	# redirect straight to the https apex.
+	@www host www.youllmissit.band
+	redir @www https://youllmissit.band{uri} permanent
+
+	encode zstd gzip
+
+	# Caddy's mime table has no entries for these on a bare alpine image.
+	# audio.ts fetches and decodes both, so the types must be right.
+	@webm path *.webm
+	header @webm Content-Type audio/webm
+	@m4a path *.m4a
+	header @m4a Content-Type audio/mp4
+	@woff2 path *.woff2
+	header @woff2 Content-Type font/woff2
+	@woff path *.woff
+	header @woff Content-Type font/woff
+
+	# Vite's content-hashed files never change under the same name.
+	@hashed path_regexp hashed ^/assets/(index|silkscreen-latin-400-normal)-[\w-]+\.(js|css|woff2|woff)$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# Everything else (index.html, art, audio, manifest.json) keeps a stable
+	# name, so revalidate on every load; ETags make that a cheap 304.
+	@unhashed not path_regexp hashed ^/assets/(index|silkscreen-latin-400-normal)-[\w-]+\.(js|css|woff2|woff)$
+	header @unhashed Cache-Control "no-cache"
+
+	file_server
+}
