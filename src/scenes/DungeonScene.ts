@@ -3,6 +3,7 @@ import { Inventory, ItemId, ALL_ITEM_IDS } from '../systems/Inventory';
 import { trackEvent } from '../systems/analytics';
 import { getLinkUrl } from '../systems/links';
 import { audio } from '../systems/audio';
+import { Controls } from '../systems/Controls';
 import { Layout, Ledge } from '../layouts';
 import { PROXIMITY_RADIUS, TILE } from '../constants';
 
@@ -54,19 +55,7 @@ export class DungeonScene extends Phaser.Scene {
   private hintDismissed = false;
   private wasOnGround = true;
 
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private keys!: {
-    W: Phaser.Input.Keyboard.Key;
-    A: Phaser.Input.Keyboard.Key;
-    D: Phaser.Input.Keyboard.Key;
-    SPACE: Phaser.Input.Keyboard.Key;
-  };
-
-  private leftHeld = false;
-  private rightHeld = false;
-  private touchStartY = 0;
-  private touchStartTime = 0;
-  private swipeJumpRequested = false;
+  private controls!: Controls;
   /*
     All listeners on DOM outside the canvas are scoped to this. The footer links and
     document survive a scene teardown, so without it a layout rebuild would stack a
@@ -111,8 +100,7 @@ export class DungeonScene extends Phaser.Scene {
     this.buildChests();
     this.buildPlayer();
     this.buildPrompt();
-    this.setupKeyboard();
-    this.setupPointer();
+    this.setupControls();
     this.setupFooterLinks();
     this.setupCompletionOverlay();
 
@@ -141,8 +129,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     const { moveSpeed, jumpVelocity } = this.layout.physics;
-    const left = this.cursors.left.isDown || this.keys.A.isDown || this.leftHeld;
-    const right = this.cursors.right.isDown || this.keys.D.isDown || this.rightHeld;
+    const { left, right, jump: jumpPressed } = this.controls.read();
 
     if (left && !right) {
       this.playerBody.setVelocityX(-moveSpeed);
@@ -153,13 +140,6 @@ export class DungeonScene extends Phaser.Scene {
     } else {
       this.playerBody.setVelocityX(0);
     }
-
-    const jumpPressed =
-      Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.W) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.SPACE) ||
-      this.swipeJumpRequested;
-    this.swipeJumpRequested = false;
 
     const onGround = this.playerBody.blocked.down;
     if (jumpPressed && onGround) {
@@ -259,49 +239,20 @@ export class DungeonScene extends Phaser.Scene {
       .setVisible(false);
   }
 
-  private setupKeyboard() {
-    this.cursors = this.input.keyboard!.createCursorKeys();
-    this.keys = this.input.keyboard!.addKeys('W,A,D,SPACE') as typeof this.keys;
-  }
-
-  private setupPointer() {
-    // Hold a screen half to move, swipe up to jump, tap a chest you're standing at to open it.
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (this.sequenceRunning) return;
-
-      if (this.nearLedge && this.isChestTap(pointer, this.nearLedge)) {
-        this.visit(this.nearLedge);
-        return;
-      }
-
-      this.touchStartY = pointer.y;
-      this.touchStartTime = this.time.now;
-      if (pointer.worldX < this.layout.width / 2) {
-        this.leftHeld = true;
-      } else {
-        this.rightHeld = true;
-      }
-    });
-
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      const dy = pointer.y - this.touchStartY;
-      const dt = this.time.now - this.touchStartTime;
-      if (dy < -40 && dt < 400) this.swipeJumpRequested = true;
-      this.leftHeld = false;
-      this.rightHeld = false;
-    });
-
-    this.input.on('gameout', () => {
-      this.leftHeld = false;
-      this.rightHeld = false;
+  private setupControls() {
+    // A press on the chest Greg is standing at opens it instead of steering him.
+    this.controls = new Controls(this, (x, y) => {
+      if (!this.nearLedge || !this.isChestTap(x, y, this.nearLedge)) return false;
+      this.visit(this.nearLedge);
+      return true;
     });
   }
 
   /** Generous tap target around the 16px chest — a bare 16px box is far too small on a phone. */
-  private isChestTap(pointer: Phaser.Input.Pointer, ledge: Ledge): boolean {
+  private isChestTap(x: number, y: number, ledge: Ledge): boolean {
     const cx = ledge.chestX + TILE / 2;
     const cy = ledge.chestY + TILE / 2;
-    return Math.abs(pointer.worldX - cx) <= 20 && Math.abs(pointer.worldY - cy) <= 20;
+    return Math.abs(x - cx) <= 20 && Math.abs(y - cy) <= 20;
   }
 
   private setupFooterLinks() {
@@ -383,8 +334,7 @@ export class DungeonScene extends Phaser.Scene {
   /** Reward beat, played on return to the tab so it isn't wasted on a backgrounded page. */
   private runRewardSequence(id: ItemId) {
     this.sequenceRunning = true;
-    this.leftHeld = false;
-    this.rightHeld = false;
+    this.controls.suspend();
     this.playerBody.setVelocityX(0);
     this.prompt.setVisible(false);
 
@@ -408,6 +358,7 @@ export class DungeonScene extends Phaser.Scene {
       this.openedChests.get(id)?.setVisible(true);
       this.renderInventoryUI();
       this.sequenceRunning = false;
+      this.controls.resume();
 
       // >= rather than ===: the fourth item may have been collected in an earlier visit.
       if (this.inventory.count() >= 4) audio.preloadCompletion();
