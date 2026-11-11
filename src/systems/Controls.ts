@@ -18,8 +18,9 @@ export type PressHandler = (worldX: number, worldY: number) => boolean;
 
 /*
   Keyboard and touch behind one question. Desktop: A/D or arrows to move, W/up/space to jump.
-  Touch: hold a half of the map to move, flick up to jump. The scene asks read() once per
-  frame and never looks at a key or a pointer itself.
+  Touch: hold a half of the map to move, flick up to jump, with the same finger or another
+  one (the rules are in touchGestures.ts). The scene asks read() once per frame and never
+  looks at a key or a pointer itself.
 */
 export class Controls {
   private gestures = new TouchGestures();
@@ -39,6 +40,10 @@ export class Controls {
       if (takesPress(pointer.worldX, pointer.worldY)) return;
       this.gestures.press(pointer.id, pointer.worldX < midline ? 'left' : 'right', pointer.y, now());
     });
+
+    scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) =>
+      this.gestures.move(pointer.id, pointer.y, now())
+    );
 
     const release = (pointer: Phaser.Input.Pointer) =>
       this.gestures.release(pointer.id, pointer.y, now());

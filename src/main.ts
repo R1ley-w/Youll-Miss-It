@@ -23,6 +23,9 @@ function buildGame(layout: Layout): Phaser.Game {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
+    // Phaser tracks one touch by default. A second lets one thumb hold a direction while
+    // the other flicks to jump.
+    input: { activePointers: 2 },
     physics: {
       default: 'arcade',
       arcade: {
