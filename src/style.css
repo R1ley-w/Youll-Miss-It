@@ -3,6 +3,16 @@
 :root {
   color-scheme: dark;
   --font-pixel: 'Silkscreen', Helvetica, monospace;
+
+  /* CSS pixels per art pixel. Whole numbers only, or the hand-drawn pixels turn uneven. */
+  --inv-px: 4px;
+}
+
+/* At 4x the bar runs under the mute button on the narrowest phones. */
+@media (max-width: 359px) {
+  :root {
+    --inv-px: 3px;
+  }
 }
 
 html,
@@ -87,15 +97,26 @@ body.layout-landscape .bg-extend {
   box-shadow: 0 0 90px 36px rgba(0, 0, 0, 0.85);
 }
 
+/*
+  inventory.png is a 64x32 canvas holding a 59x17 bar at (2, 8). The strip is sized to the
+  bar alone and the image offset to match, so the art stays exactly as exported. Inside the
+  2px frame the five cells are 10 wide with 1px dividers, except the last, which is drawn 11.
+*/
 #inventory-strip {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  padding: max(10px, env(safe-area-inset-top)) 10px 6px;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: calc(var(--inv-px) * 59);
+  height: calc(var(--inv-px) * 17);
+  padding: calc(var(--inv-px) * 2);
+  display: grid;
+  grid-template-columns: repeat(4, calc(var(--inv-px) * 10)) calc(var(--inv-px) * 11);
+  column-gap: var(--inv-px);
+  background: url('/assets/Buttons_Inventory/inventory.png') no-repeat
+    calc(var(--inv-px) * -2) calc(var(--inv-px) * -8) / calc(var(--inv-px) * 64) calc(var(--inv-px) * 32);
+  image-rendering: pixelated;
   pointer-events: none;
   z-index: 10;
 }
@@ -155,15 +176,11 @@ body.layout-landscape .bg-extend {
 }
 
 .item-slot {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 2px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.3s ease, background 0.3s ease;
+  /* The drawn cells are see-through, and the mostly dark prizes vanish against the dungeon. */
+  background: #8b857b;
 }
 
 /*
@@ -171,17 +188,13 @@ body.layout-landscape .bg-extend {
   whole slot made uncollected ones disappear entirely against the background.
 */
 .item-slot img {
-  width: 28px;
-  height: 28px;
+  flex: none;
+  width: 32px;
+  height: 32px;
   image-rendering: pixelated;
   filter: grayscale(1);
   opacity: 0.4;
   transition: filter 0.3s ease, opacity 0.3s ease;
-}
-
-.item-slot.collected {
-  border-color: #dc4e2b;
-  background: rgba(0, 0, 0, 0.65);
 }
 
 .item-slot.collected img {
