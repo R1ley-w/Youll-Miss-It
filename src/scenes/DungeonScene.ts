@@ -248,9 +248,9 @@ export class DungeonScene extends Phaser.Scene {
   private buildPrompt() {
     this.prompt = this.add
       .text(0, 0, '', {
-        fontSize: '10px',
-        fontFamily: 'Courier New, monospace',
-        color: '#ffe66d',
+        fontSize: '8px',
+        fontFamily: 'Silkscreen, Helvetica, monospace',
+        color: '#dc4e2b',
         backgroundColor: '#000000cc',
         padding: { x: 4, y: 2 },
       })
