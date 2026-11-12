@@ -11,6 +11,7 @@ export type Side = 'left' | 'right';
 export const FLICK_DISTANCE = 40; // how far up a finger must travel to count as a flick
 export const FLICK_WINDOW_MS = 400; // ...and how quickly
 export const FLICK_REARM = 20; // how far back down before the same finger can flick again
+export const TAP_SLOP = 20; // how far a finger may wander and still count as a tap when it lifts
 
 interface Finger {
   side: Side;
@@ -28,10 +29,13 @@ interface Finger {
     not reverse it.
   - Any finger can flick up to jump, including the steering one, without lifting.
   - Later fingers only jump. If the steering finger lifts, the next-oldest takes over.
+  - A finger that lands on something tappable is a claim, not a hold: it never steers or
+    jumps, and it becomes a tap if it lifts where it landed.
 */
 export class TouchGestures {
   // Insertion order is press order, which is what decides who steers.
   private fingers = new Map<number, Finger>();
+  private claims = new Map<number, { x: number; y: number }>();
   private jumpRequested = false;
   private suspended = false;
 
@@ -42,6 +46,12 @@ export class TouchGestures {
   press(id: number, side: Side, y: number, t: number) {
     if (this.suspended) return;
     this.fingers.set(id, { side, trail: [{ y, t }], armed: true, peakY: y });
+  }
+
+  /** A press on something tappable. It is kept out of steering and resolved on release. */
+  claim(id: number, x: number, y: number) {
+    if (this.suspended) return;
+    this.claims.set(id, { x, y });
   }
 
   move(id: number, y: number, t: number) {
@@ -78,21 +88,32 @@ export class TouchGestures {
     }
   }
 
-  release(id: number, y: number, t: number) {
+  /** Returns 'tap' when the lifting finger was a claim that stayed where it landed. */
+  release(id: number, x: number, y: number, t: number): 'tap' | undefined {
+    const claim = this.claims.get(id);
+    if (claim) {
+      this.claims.delete(id);
+      const stayedPut = Math.abs(x - claim.x) <= TAP_SLOP && Math.abs(y - claim.y) <= TAP_SLOP;
+      return stayedPut ? 'tap' : undefined;
+    }
+
     // The lift is the finger's last position: a flick that ends by lifting still counts.
     this.move(id, y, t);
     this.fingers.delete(id);
+    return undefined;
   }
 
   /** The fingers left the play area: nothing is held any more. */
   releaseAll() {
     this.fingers.clear();
+    this.claims.clear();
   }
 
   /** Drop every hold and ignore presses until resume(). */
   suspend() {
     this.suspended = true;
     this.fingers.clear();
+    this.claims.clear();
     this.jumpRequested = false;
   }
 

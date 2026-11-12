@@ -10,11 +10,15 @@ export interface Intent {
 }
 
 /**
- * Offered every press before it can steer Greg. Return true to take it (a tap on a chest):
- * it then never becomes a hold. It runs inside the browser's own event handler, so it may
- * open a window without tripping the popup blocker.
+ * Offered every press before it can steer Greg. To take it (a press on a chest), return
+ * what the tap should do; the press then never becomes a hold.
+ *
+ * The action runs when the finger lifts, inside the browser's own handler for that event.
+ * That timing is the point: browsers only let a page open a window from an event they count
+ * as a user gesture, and by the HTML spec a finger lifting (touchend) is one where a finger
+ * landing (touchstart) is not. Opening on the press left chests dead on a phone.
  */
-export type PressHandler = (worldX: number, worldY: number) => boolean;
+export type PressHandler = (worldX: number, worldY: number) => (() => void) | null;
 
 /*
   Keyboard and touch behind one question. Desktop: A/D or arrows to move, W/up/space to jump.
@@ -24,6 +28,7 @@ export type PressHandler = (worldX: number, worldY: number) => boolean;
 */
 export class Controls {
   private gestures = new TouchGestures();
+  private tapActions = new Map<number, () => void>();
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys: Record<'W' | 'A' | 'D' | 'SPACE', Phaser.Input.Keyboard.Key>;
 
@@ -37,7 +42,12 @@ export class Controls {
 
     scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.gestures.isSuspended) return;
-      if (takesPress(pointer.worldX, pointer.worldY)) return;
+      const onTap = takesPress(pointer.worldX, pointer.worldY);
+      if (onTap) {
+        this.tapActions.set(pointer.id, onTap);
+        this.gestures.claim(pointer.id, pointer.worldX, pointer.worldY);
+        return;
+      }
       this.gestures.press(pointer.id, pointer.worldX < midline ? 'left' : 'right', pointer.y, now());
     });
 
@@ -45,8 +55,12 @@ export class Controls {
       this.gestures.move(pointer.id, pointer.y, now())
     );
 
-    const release = (pointer: Phaser.Input.Pointer) =>
-      this.gestures.release(pointer.id, pointer.y, now());
+    const release = (pointer: Phaser.Input.Pointer) => {
+      const onTap = this.tapActions.get(pointer.id);
+      this.tapActions.delete(pointer.id);
+      const result = this.gestures.release(pointer.id, pointer.worldX, pointer.worldY, now());
+      if (result === 'tap') onTap?.();
+    };
     scene.input.on('pointerup', release);
     scene.input.on('pointerupoutside', release);
 

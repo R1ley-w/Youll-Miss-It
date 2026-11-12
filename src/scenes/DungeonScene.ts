@@ -242,9 +242,9 @@ export class DungeonScene extends Phaser.Scene {
   private setupControls() {
     // A press on the chest Greg is standing at opens it instead of steering him.
     this.controls = new Controls(this, (x, y) => {
-      if (!this.nearLedge || !this.isChestTap(x, y, this.nearLedge)) return false;
-      this.visit(this.nearLedge);
-      return true;
+      const ledge = this.nearLedge;
+      if (!ledge || !this.isChestTap(x, y, ledge)) return null;
+      return () => this.visit(ledge);
     });
   }
 

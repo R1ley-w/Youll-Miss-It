@@ -6,7 +6,7 @@ describe('holding', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
     expect(g.steering()).toBe('left');
-    g.release(1, 300, 1000);
+    g.release(1, 100, 300, 1000);
     expect(g.steering()).toBeNull();
 
     g.press(1, 'right', 300, 2000);
@@ -25,14 +25,14 @@ describe('flicking', () => {
   it('jumps on a quick upward flick', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
-    g.release(1, 250, 150);
+    g.release(1, 100, 250, 150);
     expect(g.takeJump()).toBe(true);
   });
 
   it('reports a jump once', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
-    g.release(1, 250, 150);
+    g.release(1, 100, 250, 150);
     g.takeJump();
     expect(g.takeJump()).toBe(false);
   });
@@ -40,18 +40,18 @@ describe('flicking', () => {
   it('does not jump on a short or downward movement', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
-    g.release(1, 280, 150);
+    g.release(1, 100, 280, 150);
     expect(g.takeJump()).toBe(false);
 
     g.press(1, 'left', 300, 1000);
-    g.release(1, 360, 1150);
+    g.release(1, 100, 360, 1150);
     expect(g.takeJump()).toBe(false);
   });
 
   it('does not jump on a slow upward drag', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
-    g.release(1, 240, 900);
+    g.release(1, 100, 240, 900);
     expect(g.takeJump()).toBe(false);
   });
 });
@@ -110,7 +110,7 @@ describe('jumping while moving', () => {
     expect(g.takeJump()).toBe(true);
     expect(g.steering()).toBe('left');
 
-    g.release(2, 240, 1150);
+    g.release(2, 100, 240, 1150);
     expect(g.steering()).toBe('left');
   });
 
@@ -118,9 +118,53 @@ describe('jumping while moving', () => {
     const g = new TouchGestures();
     g.press(1, 'left', 300, 0);
     g.press(2, 'right', 300, 100);
-    g.release(1, 300, 2000);
+    g.release(1, 100, 300, 2000);
     expect(g.steering()).toBe('right');
     expect(g.takeJump()).toBe(false);
+  });
+});
+
+describe('tapping', () => {
+  it('reports a tap when a claimed finger lifts where it landed', () => {
+    const g = new TouchGestures();
+    g.claim(1, 312, 504);
+    expect(g.release(1, 315, 500, 120)).toBe('tap');
+  });
+
+  it('never steers or jumps with a claimed finger', () => {
+    const g = new TouchGestures();
+    g.claim(1, 312, 504);
+    expect(g.steering()).toBeNull();
+    g.move(1, 440, 50);
+    expect(g.takeJump()).toBe(false);
+  });
+
+  it('is not a tap if the finger dragged away before lifting', () => {
+    const g = new TouchGestures();
+    g.claim(1, 312, 504);
+    expect(g.release(1, 312, 430, 200)).toBeUndefined();
+  });
+
+  it('taps with a second finger while the first keeps steering', () => {
+    const g = new TouchGestures();
+    g.press(1, 'right', 600, 0);
+    g.claim(2, 312, 504);
+    expect(g.release(2, 312, 504, 100)).toBe('tap');
+    expect(g.steering()).toBe('right');
+  });
+
+  it('is not a tap if the controls were suspended while the finger was down', () => {
+    const g = new TouchGestures();
+    g.claim(1, 312, 504);
+    g.suspend();
+    g.resume();
+    expect(g.release(1, 312, 504, 100)).toBeUndefined();
+  });
+
+  it('does not report an ordinary hold as a tap', () => {
+    const g = new TouchGestures();
+    g.press(1, 'left', 300, 0);
+    expect(g.release(1, 100, 300, 80)).toBeUndefined();
   });
 });
 
