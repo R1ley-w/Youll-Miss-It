@@ -16,13 +16,6 @@
   }
 }
 
-/* At 4x the bar runs under the mute button on the narrowest phones. */
-@media (max-width: 359px) {
-  :root {
-    --inv-px: 3px;
-  }
-}
-
 html,
 body {
   margin: 0;
@@ -130,6 +123,28 @@ body.layout-landscape .bg-extend {
 }
 
 /*
+  On a phone the portrait map fills the screen, and a centred bar sits on the top ledge,
+  hiding its chest and Greg with it. That ledge starts at the map's centre line and the wall
+  to its left is bare, so the bar moves there, one step smaller. It has to end before the
+  middle of the screen: 10px + 59 art px is 187px at 3x, which fits from 374px wide.
+  The landscape map has a ledge in that corner and nothing under the centre, so it keeps
+  the centred bar.
+*/
+@media (max-width: 599px) {
+  body:not(.layout-landscape) #inventory-strip {
+    --inv-px: 3px;
+    left: max(10px, env(safe-area-inset-left));
+    transform: none;
+  }
+}
+
+@media (max-width: 373px) {
+  body:not(.layout-landscape) #inventory-strip {
+    --inv-px: 2px;
+  }
+}
+
+/*
   button_*.png are 32x32 canvases holding a 29x17 button at (2, 5), with a 3px rim that has
   to stay unstretched: the rim is the only thing that differs between the two states. The
   slices therefore include the transparent canvas margin, and this layer is pushed out by
@@ -233,8 +248,9 @@ body.layout-landscape .bg-extend {
 */
 .item-slot img {
   flex: none;
-  width: 32px;
-  height: 32px;
+  /* 32px, the sprite's own size, on the full-size bar; shrinks in step with a smaller one. */
+  width: calc(var(--inv-px) * 8);
+  height: calc(var(--inv-px) * 8);
   image-rendering: pixelated;
   filter: grayscale(1);
   opacity: 0.4;
