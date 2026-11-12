@@ -9,6 +9,35 @@ if (import.meta.env.DEV) {
   (window as unknown as { audio: typeof audio }).audio = audio;
 }
 
+/*
+  Add ?debug to the address for a live readout of the audio engine on screen. A phone has no
+  console to look at, and the audio failures worth chasing only happen on a phone.
+*/
+if (new URLSearchParams(location.search).has('debug')) {
+  const readout = document.createElement('pre');
+  readout.style.cssText =
+    'position:fixed;left:4px;bottom:64px;z-index:40;margin:0;padding:4px 6px;max-width:70vw;' +
+    'font:10px/1.3 monospace;color:#9f9;background:rgba(0,0,0,.8);pointer-events:none;' +
+    'white-space:pre-wrap';
+  document.body.appendChild(readout);
+  window.setInterval(() => {
+    const d = audio.debug();
+    const t = d.wantedTrack;
+    const r = d.lastPlayRejection;
+    readout.textContent = [
+      `ctx ${d.ctxState}  unlocked ${d.unlocked}  muted ${d.muted}`,
+      `master ${d.masterGain?.toFixed(2)}  bed ${d.bedGain?.toFixed(2)}`,
+      `chest ${d.activeChest}  reward ${d.rewardActive}`,
+      t
+        ? `song ${d.wantedSong}: ${t.paused ? 'PAUSED' : 'playing'} t=${t.time} gain=${t.gain} ` +
+          `ready=${t.readyState} mem=${t.fromMemory} blessed=${t.blessed} err=${t.error}`
+        : `song ${d.wantedSong}: no element`,
+      `preloaded ${d.songsPreloaded.length}  blessed ${d.songsBlessed.length}/${d.songsLoaded.length}`,
+      r ? `last refused: ${r.song} ${r.reason} ${r.secondsAgo}s ago` : 'last refused: none',
+    ].join('\n');
+  }, 250);
+}
+
 function buildGame(layout: Layout): Phaser.Game {
   document.body.classList.toggle('layout-landscape', layout.id === 'landscape');
 
