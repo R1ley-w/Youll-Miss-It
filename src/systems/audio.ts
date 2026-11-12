@@ -39,6 +39,7 @@ const GAIN_EXPONENT = 1.5; // gain curve ≈ (1 − d/R)^1.5
 const SCHEDULE_LEAD = 0.05; // every ramp starts this far ahead of ctx.currentTime (s)
 const RESUME_TIMEOUT_MS = 3000; // how long to poll for `running` after resume()
 const RESUME_POLL_MS = 50;
+const REPLAY_RETRY_MS = 1000; // how often to retry a song the browser has left paused
 
 const ONE_SHOT_MIN_MS = 4000;
 const ONE_SHOT_MAX_MS = 12000;
@@ -144,6 +145,7 @@ class AudioEngine {
 
   private oneShotTimer: number | null = null;
   private lastUpdateTime = 0;
+  private nextReplayAt = 0;
   private heardMs = new Map<ItemId, number>();
   private heardFired = new Set<ItemId>();
 
@@ -202,6 +204,7 @@ class AudioEngine {
     // unlock() can fire while WebKit's clock is still frozen and be silently dropped. This
     // way the mix comes up the instant the context is genuinely running, no matter how late.
     this.setGain(this.master!, this.masterTarget, this.masterTimeConstant);
+    this.keepSongPlaying(now);
 
     if (this.completionActive) return;
 
@@ -546,6 +549,24 @@ class AudioEngine {
     this.cancelRelease(key);
     const track = this.ensureSong(key);
     track.el.currentTime = 0; // re-entering a field restarts the track at its hook, every time
+    void this.playElement(track.el, key);
+  }
+
+  /*
+    Whichever song holds the floor must actually be playing. Starting it is a one-off call
+    (on entering a field, on tab return) and the browser is free to refuse or never get to
+    it: on a phone the context often stays suspended after a visit until the next touch, so
+    the resume in onShow() gives up and the song it paused on the way out is left paused,
+    silent at full gain, until Greg walks out of the field and back in. Checking every frame
+    means a song comes back as soon as the context does, from where it stopped.
+  */
+  private keepSongPlaying(now: number) {
+    const key = this.completionActive ? COMPLETION : this.activeChest;
+    const track = key && this.tracks.get(key);
+    if (!key || !track || !track.el.paused || track.el.ended) return;
+    if (now < this.nextReplayAt) return;
+    this.nextReplayAt = now + REPLAY_RETRY_MS;
+    this.pausedForHide.delete(key);
     void this.playElement(track.el, key);
   }
 
