@@ -23,6 +23,12 @@ resolved toward "always deliver the hook."
 - Max **two** song elements loaded at once (current + outgoing); release the rest.
 - **Not** in Phaser's `preload()` — the scene already blocks on 48 assets and that loader
   gates the game appearing at all.
+- Song **files** are fetched in the background once audio unlocks, in climb order, and kept
+  in memory as object URLs; the media elements are still created on demand and still capped
+  at two. Loading on entry to a field was too late on a phone: the download took longer than
+  the walk across the field, so the fade-in was never heard (and phones ignore `preload` on
+  media elements). Skipped when the browser reports Save-Data. The completion track is fetched
+  the same way when the fourth item is collected.
 
 ## Platform constraints (not optional)
 

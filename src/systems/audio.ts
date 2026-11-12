@@ -1,6 +1,6 @@
 import type { Layout } from '../layouts';
 import { TILE } from '../constants';
-import { ItemId } from './Inventory';
+import { ALL_ITEM_IDS, ItemId } from './Inventory';
 import { trackEvent } from './analytics';
 
 /*
@@ -120,6 +120,9 @@ class AudioEngine {
   private oneShotNames: string[] = [];
 
   private tracks = new Map<SongKey, Track>();
+  // Song files fetched ahead of need and held in memory, as object URLs. See preloadSong().
+  private songUrls = new Map<SongKey, string>();
+  private songFetches = new Map<SongKey, Promise<void>>();
   // Songs fading out, each with its pending release. Usually one; briefly two during an eviction.
   private releaseTimers = new Map<SongKey, number>();
   // Songs that were playing when the tab hid, to pick back up mid-song on return.
@@ -276,7 +279,7 @@ class AudioEngine {
   /** Lazy-load the completion track once the fourth item is collected. Idempotent. */
   preloadCompletion() {
     if (!this.ctx) return;
-    this.ensureSong(COMPLETION);
+    void this.preloadSong(COMPLETION);
   }
 
   /**
@@ -362,6 +365,7 @@ class AudioEngine {
     this.scheduleOneShots();
 
     this.setMasterTarget(MASTER_FADE_TC);
+    void this.preloadSongs();
     console.info('[audio] unlocked', {
       state: this.ctx.state,
       muted: this.muted,
@@ -524,13 +528,60 @@ class AudioEngine {
     );
   }
 
+  private songSrc(key: SongKey): string {
+    return `/assets/audio/tracks/${key}.${pickExt()}`;
+  }
+
+  /*
+    A song used to start downloading only when Greg walked into its field. On a phone that
+    takes a second or two, and a field is under a second's walk across, so the song arrived
+    late and at full volume: the approach, where proximity fades it in, was silent. Phones
+    also ignore `preload` on a media element, so the element can't be asked to fetch early.
+
+    Instead the files are fetched here, in the background once audio is unlocked, and handed
+    to the elements from memory. It gates nothing: the game is already on screen and the bed
+    already playing. The five songs are about 6 MB together as Opus, 7.5 MB as AAC.
+  */
+  private preloadSong(key: SongKey): Promise<void> {
+    let fetching = this.songFetches.get(key);
+    if (!fetching) {
+      const type = pickExt() === 'm4a' ? 'audio/mp4' : 'audio/webm';
+      fetching = fetch(this.songSrc(key))
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.arrayBuffer();
+        })
+        .then((data) => {
+          this.songUrls.set(key, URL.createObjectURL(new Blob([data], { type })));
+        })
+        .catch((err) => {
+          console.warn(`[audio] could not preload ${key}; it will stream when needed`, err);
+          this.songFetches.delete(key);
+        });
+      this.songFetches.set(key, fetching);
+    }
+    return fetching;
+  }
+
+  /** One at a time, in climb order, so the chest Greg reaches first is ready first. */
+  private async preloadSongs() {
+    // A visitor who has asked their browser to save data gets the old on-demand loading.
+    const connection = (navigator as { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+
+    const order = this.chestCenters.size ? [...this.chestCenters.keys()] : ALL_ITEM_IDS;
+    for (const key of order) await this.preloadSong(key);
+  }
+
   private ensureSong(key: SongKey): Track {
     const existing = this.tracks.get(key);
     if (existing) return existing;
     const ctx = this.ctx!;
     const el = new Audio();
     el.preload = 'auto';
-    el.src = `/assets/audio/tracks/${key}.${pickExt()}`;
+    // Normally the preloaded copy. The network address is the fallback for a chest reached
+    // before its download finished; that one start will lag, as they all used to.
+    el.src = this.songUrls.get(key) ?? this.songSrc(key);
     el.loop = true;
 
     // Media elements are created only after the AudioContext exists, and their src is set
@@ -707,6 +758,7 @@ class AudioEngine {
       buffersLoaded: [...this.buffers.keys()],
       activeChest: this.activeChest,
       songsLoaded: [...this.tracks.keys()],
+      songsPreloaded: [...this.songUrls.keys()],
       rewardActive: this.rewardActive,
       completionActive: this.completionActive,
     };
