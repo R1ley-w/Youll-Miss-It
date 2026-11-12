@@ -20,12 +20,13 @@ resolved toward "always deliver the hook."
   triggering for SFX.
 - All gain via `setTargetAtTime`, **never** `gain.value = x` per frame.
 - The scene is a dumb position feed: `setLayout(layout)`, `update(x, y)`, plus event calls.
-- Max **two** song elements loaded at once (current + outgoing); release the rest.
+- Max **two** songs *sounding* at once (current + outgoing). Each chest song keeps one media
+  element for the whole session, paused when not in use — see "Bless every song element in a
+  gesture" below for why they are no longer created and released per visit.
 - **Not** in Phaser's `preload()` — the scene already blocks on 48 assets and that loader
   gates the game appearing at all.
 - Song **files** are fetched in the background once audio unlocks, in climb order, and kept
-  in memory as object URLs; the media elements are still created on demand and still capped
-  at two. Loading on entry to a field was too late on a phone: the download took longer than
+  in memory as object URLs. Loading on entry to a field was too late on a phone: the download took longer than
   the walk across the field, so the fade-in was never heard (and phones ignore `preload` on
   media elements). Skipped when the browser reports Save-Data. The completion track is fetched
   the same way when the fourth item is collected.
@@ -57,6 +58,19 @@ is silence. Chromium reports `running` immediately after a gesture; **WebKit rep
 **Do:** `await ctx.resume()` *and* poll until `ctx.state === 'running'` before any ramp or
 source start. Re-check before each playback start. Schedule with a small lead,
 `ctx.currentTime + 0.05`.
+
+### Bless every song element in a gesture
+
+WebKit refuses `play()` on a media element outside a user gesture (`NotAllowedError`), except
+on an element that has already been played from inside one. A fresh element is only let
+through while the page is already audible. After a visit to another app the page has been
+silent, so the song at the chest just visited was refused and sat paused through its own
+reward beat (seen on a real iPhone via the `?debug` readout, 2026-11-12).
+
+**Do:** keep one element per chest song for the session, and call `play()` on each once from
+inside a gesture (`blessTracks()`), pausing it again if it shouldn't be sounding. A finger
+*lifting* (`touchend`, `pointerup`) is a gesture; a finger landing is not. A paused song that
+should be sounding is also retried on every gesture and once a second from `update()`.
 
 ## Proximity mechanic
 

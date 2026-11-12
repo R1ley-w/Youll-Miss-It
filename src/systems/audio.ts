@@ -69,6 +69,8 @@ interface Track {
   el: HTMLAudioElement;
   source: MediaElementAudioSourceNode;
   gain: GainNode;
+  /** True once play() has been called on it from inside a user gesture. See blessTracks(). */
+  blessed: boolean;
 }
 
 // Fallback one-shot list if the manifest can't be fetched. The manifest is authoritative
@@ -149,6 +151,7 @@ class AudioEngine {
   private oneShotTimer: number | null = null;
   private lastUpdateTime = 0;
   private nextReplayAt = 0;
+  private lastPlayRejection: { song: string; reason: string; at: number } | null = null;
   private heardMs = new Map<ItemId, number>();
   private heardFired = new Set<ItemId>();
 
@@ -167,10 +170,22 @@ class AudioEngine {
     // resume() when it doesn't count that event as a user activation. The listeners stay for
     // the whole session — after unlocking they're a cheap no-op, and they still let a gesture
     // revive a context the OS interrupted (an iOS phone call). unlock() is idempotent.
-    const gesture = () => void this.unlock();
+    //
+    // The list includes the end of a touch as well as its start. A finger lifting is what
+    // phone browsers count as a user gesture; a finger landing is not, and taps on the game
+    // canvas never produce a click. A paused song is restarted here too, synchronously,
+    // because a play() made from inside a gesture is one the browser has no grounds to refuse
+    // — unlike the per-frame retry, which runs outside any event.
+    const gesture = () => {
+      this.blessTracks();
+      this.keepSongPlaying(performance.now(), true);
+      void this.unlock();
+    };
     window.addEventListener('pointerdown', gesture);
+    window.addEventListener('pointerup', gesture);
     window.addEventListener('mousedown', gesture);
     window.addEventListener('touchstart', gesture);
+    window.addEventListener('touchend', gesture);
     window.addEventListener('keydown', gesture);
     window.addEventListener('click', gesture);
 
@@ -523,6 +538,7 @@ class AudioEngine {
       () => true,
       (err) => {
         console.warn(`[audio] play() rejected for ${label}`, err);
+        this.lastPlayRejection = { song: label, reason: String(err?.name ?? err), at: performance.now() };
         return false;
       }
     );
@@ -553,6 +569,9 @@ class AudioEngine {
         })
         .then((data) => {
           this.songUrls.set(key, URL.createObjectURL(new Blob([data], { type })));
+          // Chest songs get their element now, so the next touch can bless it well before
+          // Greg reaches the chest.
+          if (key !== COMPLETION && this.ctx) this.ensureSong(key);
         })
         .catch((err) => {
           console.warn(`[audio] could not preload ${key}; it will stream when needed`, err);
@@ -591,7 +610,7 @@ class AudioEngine {
     gain.gain.value = 0;
     source.connect(gain).connect(this.master!);
 
-    const track = { el, source, gain };
+    const track = { el, source, gain, blessed: false };
     this.tracks.set(key, track);
     return track;
   }
@@ -611,14 +630,50 @@ class AudioEngine {
     silent at full gain, until Greg walks out of the field and back in. Checking every frame
     means a song comes back as soon as the context does, from where it stopped.
   */
-  private keepSongPlaying(now: number) {
-    const key = this.completionActive ? COMPLETION : this.activeChest;
+  private keepSongPlaying(now: number, insideGesture = false) {
+    const key = this.wantedSong();
     const track = key && this.tracks.get(key);
     if (!key || !track || !track.el.paused || track.el.ended) return;
-    if (now < this.nextReplayAt) return;
+    if (document.visibilityState !== 'visible') return;
+    if (!insideGesture && now < this.nextReplayAt) return;
     this.nextReplayAt = now + REPLAY_RETRY_MS;
     this.pausedForHide.delete(key);
     void this.playElement(track.el, key);
+  }
+
+  /*
+    WebKit refuses play() on a media element unless the call comes from inside a user gesture,
+    with one standing exception: an element that has already been played from a gesture is
+    trusted from then on. Elements made fresh on entering a field never earned that. They got
+    by while the page was already making sound, and were refused (NotAllowedError) once it
+    had been silent — which is exactly the state after a visit to another app, so the song at
+    the chest just visited stayed paused through its own reward beat.
+
+    So every song element is played once from inside a gesture, as soon as there is one after
+    it exists. Its gain is at zero and it is paused again straight away unless it is meant to
+    be sounding, so nothing is heard.
+  */
+  private blessTracks() {
+    if (document.visibilityState !== 'visible') return;
+    for (const [key, track] of this.tracks) {
+      if (track.blessed) continue;
+      track.blessed = true;
+      const wasPaused = track.el.paused;
+      track.el.play().then(
+        () => {
+          const shouldSound = key === this.wantedSong() || this.releaseTimers.has(key);
+          if (wasPaused && !shouldSound) track.el.pause();
+        },
+        () => {
+          // Not every listed event counts as a gesture everywhere; the next one will retry.
+          track.blessed = false;
+        }
+      );
+    }
+  }
+
+  private wantedSong(): SongKey | null {
+    return this.completionActive ? COMPLETION : this.activeChest;
   }
 
   /** Hand the active slot to `next`, fading out whatever held it. */
@@ -628,7 +683,7 @@ class AudioEngine {
   }
 
   private fadeOut(key: SongKey) {
-    // Max two songs loaded: anything still fading from an earlier swap is hurried off with a
+    // Max two songs sounding: anything still fading from an earlier swap is hurried off with a
     // short fade rather than cut dead, so a fast traversal never pops an audible track.
     for (const other of [...this.releaseTimers.keys()]) {
       if (other !== key) this.scheduleRelease(other, EVICT_TC, EVICT_RELEASE_MS);
@@ -663,6 +718,9 @@ class AudioEngine {
     const track = this.tracks.get(key);
     if (!track) return;
     track.el.pause();
+    // A chest song keeps its element for the whole session, parked: a new element would have
+    // to be blessed all over again. Only the one-off completion track is torn down.
+    if (key !== COMPLETION) return;
     track.el.removeAttribute('src');
     track.el.load();
     track.source.disconnect();
@@ -745,9 +803,29 @@ class AudioEngine {
     button.title = this.muted ? 'Unmute' : 'Mute';
   }
 
-  /** Dev-only snapshot of internal state, for headless/inspector diagnosis of silent failures. */
+  /** Snapshot of internal state, for diagnosing silent failures (see the ?debug readout). */
   debug() {
+    const wanted = this.wantedSong();
+    const track = wanted ? this.tracks.get(wanted) : undefined;
+    const rejection = this.lastPlayRejection;
     return {
+      wantedSong: wanted,
+      wantedTrack: track
+        ? {
+            paused: track.el.paused,
+            readyState: track.el.readyState,
+            time: Number(track.el.currentTime.toFixed(1)),
+            gain: Number(track.gain.gain.value.toFixed(2)),
+            fromMemory: track.el.src.startsWith('blob:'),
+            blessed: track.blessed,
+            error: track.el.error?.code ?? null,
+          }
+        : null,
+      lastPlayRejection: rejection && {
+        song: rejection.song,
+        reason: rejection.reason,
+        secondsAgo: Math.round((performance.now() - rejection.at) / 1000),
+      },
       unlocked: this.unlocked,
       muted: this.muted,
       ctxState: this.ctx?.state ?? null,
@@ -758,6 +836,7 @@ class AudioEngine {
       buffersLoaded: [...this.buffers.keys()],
       activeChest: this.activeChest,
       songsLoaded: [...this.tracks.keys()],
+      songsBlessed: [...this.tracks].filter(([, t]) => t.blessed).map(([key]) => key),
       songsPreloaded: [...this.songUrls.keys()],
       rewardActive: this.rewardActive,
       completionActive: this.completionActive,
