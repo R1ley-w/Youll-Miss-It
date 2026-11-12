@@ -111,7 +111,12 @@ export class DungeonScene extends Phaser.Scene {
       },
       { signal: this.domListeners.signal }
     );
+    // 'destroy' is the one that matters: a layout rebuild destroys the whole game, and Phaser
+    // then emits only 'destroy' on the scene, never 'shutdown'. Without it every rebuild left
+    // a dead scene still listening, doubling analytics and racing the live scene for the
+    // pending prize.
     this.events.once('shutdown', () => this.domListeners.abort());
+    this.events.once('destroy', () => this.domListeners.abort());
 
     this.renderInventoryUI();
 
