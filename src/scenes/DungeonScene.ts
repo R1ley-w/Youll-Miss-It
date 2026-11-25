@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { assetUrl } from '../assetUrl';
 import { Inventory, ItemId, ALL_ITEM_IDS } from '../systems/Inventory';
 import { trackEvent } from '../systems/analytics';
 import { getLinkUrl } from '../systems/links';
@@ -14,11 +15,11 @@ const PENDING_KEY = 'ymi-pending-v1';
 const SEQUENCE_MS = 1400;
 
 const PRIZE_SRC: Record<ItemId, string> = {
-  merch: '/assets/prizes/Shirt.png',
-  youtube: '/assets/prizes/Guitar.png',
-  streaming: '/assets/prizes/Headphones.png',
-  socials: '/assets/prizes/Skateboard.png',
-  featured: '/assets/prizes/Drumsticks.png',
+  merch: assetUrl('assets/prizes/Shirt.png'),
+  youtube: assetUrl('assets/prizes/Guitar.png'),
+  streaming: assetUrl('assets/prizes/Headphones.png'),
+  socials: assetUrl('assets/prizes/Skateboard.png'),
+  featured: assetUrl('assets/prizes/Drumsticks.png'),
 };
 
 const prizeTexture = (id: ItemId) => `prize_${id}`;
@@ -70,7 +71,7 @@ export class DungeonScene extends Phaser.Scene {
 
   preload() {
     this.load.image('bg', this.layout.backgroundSrc);
-    this.load.image('opened_chest', '/assets/opened_chest.png');
+    this.load.image('opened_chest', assetUrl('assets/opened_chest.png'));
 
     for (const id of ALL_ITEM_IDS) {
       this.load.image(prizeTexture(id), PRIZE_SRC[id]);
@@ -84,7 +85,7 @@ export class DungeonScene extends Phaser.Scene {
     ];
     for (const [key, path, count] of sets) {
       for (let i = 1; i <= count; i++) {
-        this.load.image(`${key}_${i}`, `/assets/greg_animation/${path}-${i}.png`);
+        this.load.image(`${key}_${i}`, assetUrl(`assets/greg_animation/${path}-${i}.png`));
       }
     }
   }

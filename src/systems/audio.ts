@@ -1,4 +1,5 @@
 import type { Layout } from '../layouts';
+import { assetUrl } from '../assetUrl';
 import { TILE } from '../constants';
 import { ALL_ITEM_IDS, ItemId } from './Inventory';
 import { trackEvent } from './analytics';
@@ -446,7 +447,7 @@ class AudioEngine {
     const exts = primary === 'm4a' ? ['m4a', 'webm'] : ['webm', 'm4a'];
 
     try {
-      const manifest = (await fetch('/assets/audio/manifest.json').then((r) =>
+      const manifest = (await fetch(assetUrl('assets/audio/manifest.json')).then((r) =>
         r.json()
       )) as AudioManifest;
       this.manifestLoaded = true;
@@ -472,7 +473,7 @@ class AudioEngine {
   private async loadBuffer(name: string, dir: AssetDir, exts: string[]): Promise<void> {
     for (const ext of exts) {
       try {
-        const res = await fetch(`/assets/audio/${dir}/${name}.${ext}`);
+        const res = await fetch(assetUrl(`assets/audio/${dir}/${name}.${ext}`));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buffer = await this.ctx!.decodeAudioData(await res.arrayBuffer());
         this.buffers.set(name, buffer);
@@ -545,7 +546,7 @@ class AudioEngine {
   }
 
   private songSrc(key: SongKey): string {
-    return `/assets/audio/tracks/${key}.${pickExt()}`;
+    return assetUrl(`assets/audio/tracks/${key}.${pickExt()}`);
   }
 
   /*

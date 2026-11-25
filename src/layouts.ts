@@ -1,3 +1,4 @@
+import { assetUrl } from './assetUrl';
 import { ItemId } from './systems/Inventory';
 
 export interface Ledge {
@@ -42,7 +43,7 @@ export interface Layout {
 
 export const PORTRAIT: Layout = {
   id: 'portrait',
-  backgroundSrc: '/assets/Background.png',
+  backgroundSrc: assetUrl('assets/Background.png'),
   width: 384,
   height: 640,
   groundSurfaceY: 608,
@@ -65,7 +66,7 @@ export const PORTRAIT: Layout = {
 
 export const LANDSCAPE: Layout = {
   id: 'landscape',
-  backgroundSrc: '/assets/Background-landscape.png',
+  backgroundSrc: assetUrl('assets/Background-landscape.png'),
   width: 768,
   height: 432,
   groundSurfaceY: 400,
